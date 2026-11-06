@@ -1,0 +1,23 @@
+name: Validate PB Bot
+on:
+  push:
+    paths:
+      - 'bot.py'
+      - 'requirements.txt'
+      - '.github/workflows/validate-bot.yml'
+  pull_request:
+    paths:
+      - 'bot.py'
+      - 'requirements.txt'
+      - '.github/workflows/validate-bot.yml'
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m py_compile bot.py
+      - run: pip install -r requirements.txt
+      - run: python -c "import bot; print('Bot import verified')"
