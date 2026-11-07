@@ -86,7 +86,7 @@ class Store:
   await self.conn.executescript("""CREATE TABLE IF NOT EXISTS submissions(
   id INTEGER PRIMARY KEY AUTOINCREMENT,guild INTEGER NOT NULL,submitter INTEGER NOT NULL,
   category TEXT NOT NULL,activity TEXT NOT NULL,variant TEXT NOT NULL,
-  members TEXT NOT NULL,member_ids TEXT,ms INTEGER NOT NULL,proof TEXT,status TEXT NOT NULL DEFAULT 'pending',
+  members TEXT NOT NULL,member_ids TEXT,ms INTEGER NOT NULL,pb_date TEXT,proof TEXT,status TEXT NOT NULL DEFAULT 'pending',
   reviewer INTEGER,review_channel INTEGER,review_message INTEGER,created TEXT,updated TEXT);
   CREATE INDEX IF NOT EXISTS pb_rank ON submissions(guild,category,activity,variant,status,ms);
   CREATE TABLE IF NOT EXISTS panels(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
@@ -95,15 +95,17 @@ class Store:
    columns={row[1] async for row in c}
   if "member_ids" not in columns:
    await self.conn.execute("ALTER TABLE submissions ADD COLUMN member_ids TEXT")
+  if "pb_date" not in columns:
+   await self.conn.execute("ALTER TABLE submissions ADD COLUMN pb_date TEXT")
   await self.conn.commit()
  async def one(self,q,args=()):
   async with self.conn.execute(q,args) as c:return await c.fetchone()
  async def all(self,q,args=()):
   async with self.conn.execute(q,args) as c:return await c.fetchall()
- async def add(self,g,u,cat,act,v,m,member_ids,ms,p):
+ async def add(self,g,u,cat,act,v,m,member_ids,ms,pb_date,p):
   async with self.lock:
-   c=await self.conn.execute("""INSERT INTO submissions(guild,submitter,category,activity,variant,members,member_ids,ms,proof,created,updated)
-   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(g,u,cat,act,v,m,member_ids,ms,p,now(),now()))
+   c=await self.conn.execute("""INSERT INTO submissions(guild,submitter,category,activity,variant,members,member_ids,ms,pb_date,proof,created,updated)
+   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(g,u,cat,act,v,m,member_ids,ms,pb_date,p,now(),now()))
    await self.conn.commit();return c.lastrowid
  async def change(self,sid,prev,target,reviewer=None,proof=None):
   async with self.lock:
@@ -631,9 +633,11 @@ class Review(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(
    ui.TextDisplay(
-    f"-# SUBMITTED TIME\n"
-    f"## {fmt(r['ms'])}\n"
-    f"**{review_members(r)}**"
+    f"-# PB DATE · SUBMITTED TIME\n"
+    f"**{clean(r['pb_date'] or 'Legacy / not recorded')}** · **{fmt(r['ms'])}**\n"
+    f"**{review_members(r)}**\n\n"
+    f"-# Eligibility: the PB must have been achieved after the submitter joined Novus. "
+    f"For group PBs, every listed player must also have been a Novus member on the PB date."
    )
   )
 
@@ -747,9 +751,29 @@ async def decide(i,sid,choice):
    await user.send(f"Your Novus PB #{sid} needs proof. Use /pbproof with submission_id {sid} in the Novus server.")
   except discord.HTTPException:logging.warning("Unable to DM submission owner")
 
-async def submit(i,cat,act,variant,t,members,proof):
+async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
  try:ms=parse_ms(t)
  except ValueError as e:return await i.response.send_message(str(e),ephemeral=True)
+
+ raw_date=pb_date.strip()
+ parsed_date=None
+ for date_format in ("%Y-%m-%d","%m/%d/%Y"):
+  try:
+   parsed_date=datetime.strptime(raw_date,date_format).date()
+   break
+  except ValueError:
+   pass
+ if parsed_date is None:
+  return await i.response.send_message(
+   "Enter the PB date as YYYY-MM-DD or MM/DD/YYYY.",
+   ephemeral=True
+  )
+ if parsed_date>datetime.now(timezone.utc).date():
+  return await i.response.send_message(
+   "The PB date cannot be in the future.",
+   ephemeral=True
+  )
+ normalized_date=parsed_date.isoformat()
 
  required=team_size(cat,variant)
  if not members:
@@ -767,7 +791,7 @@ async def submit(i,cat,act,variant,t,members,proof):
  await i.response.defer(thinking=True,ephemeral=True)
  names=", ".join(m.display_name for m in members)
  member_ids=",".join(str(m.id) for m in members)
- sid=await store.add(i.guild_id,i.user.id,cat,act,variant,names,member_ids,ms,proof)
+ sid=await store.add(i.guild_id,i.user.id,cat,act,variant,names,member_ids,ms,normalized_date,proof)
  r=await store.one("SELECT * FROM submissions WHERE id=?",(sid,))
  try:
   message=await ch.send(view=Review(r),allowed_mentions=discord.AllowedMentions.none())
@@ -775,7 +799,13 @@ async def submit(i,cat,act,variant,t,members,proof):
  except discord.HTTPException:
   logging.exception("Staff review message failed")
   return await i.followup.send(f"Submission #{sid} saved, but staff delivery failed. Notify staff.",ephemeral=True)
- await i.followup.send(f"PB #{sid} submitted for staff review! "+("Proof received." if proof else "Add proof with /pbproof."),ephemeral=True)
+ await i.followup.send(
+  f"PB #{sid} submitted for staff review for **{normalized_date}**. "
+  "The PB must have been achieved after you joined Novus; for group PBs, every listed player "
+  "must also have been a Novus member on that date. "
+  + ("Proof received." if proof else "Add proof with /pbproof."),
+  ephemeral=True
+ )
 
 def submission_select_options(category):
  options=[]
@@ -820,11 +850,12 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    max_values=8,
    custom_id="pb:submit:members"
   )
-  self.proof_input=ui.TextInput(
-   placeholder="https://...",
-   required=False,
-   max_length=500,
-   custom_id="pb:submit:proof"
+  self.date_input=ui.TextInput(
+   placeholder="YYYY-MM-DD",
+   required=True,
+   min_length=8,
+   max_length=10,
+   custom_id="pb:submit:date"
   )
 
   self.add_item(
@@ -850,16 +881,16 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   )
   self.add_item(
    ui.Label(
-    text="Party members",
-    description="Start typing a Discord name, then select the matching member(s).",
-    component=self.members_select
+    text="PB date",
+    description="Must be from after you joined Novus. Use YYYY-MM-DD.",
+    component=self.date_input
    )
   )
   self.add_item(
    ui.Label(
-    text="Proof URL",
-    description="Optional. Screenshot/video can be added later with /pbproof.",
-    component=self.proof_input
+    text="Party members",
+    description="Group PB: every listed player must also be a Novus member.",
+    component=self.members_select
    )
   )
 
@@ -882,11 +913,12 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    activity,
    variant,
    self.time_input.value,
+   self.date_input.value,
    self.members_select.values,
-   self.proof_input.value.strip()
+   ""
   )
 
-@bot.tree.command(name="pbsubmit",description="Submit a new PB for staff review")
+@bot.tree.command(name="pbsubmit",description="Submit an eligible Novus PB for staff review")
 @app_commands.guild_only()
 async def pbsubmit(i:discord.Interaction):
  await i.response.send_modal(SubmitModal())
