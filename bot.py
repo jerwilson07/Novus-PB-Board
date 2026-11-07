@@ -176,7 +176,6 @@ class Home(ui.LayoutView):
 
   hero.add_item(
    ui.TextDisplay(
-    "## ✦ NOVUS\n"
     "### PERSONAL BEST LEADERBOARDS\n"
     "-# VERIFIED CLAN RECORDS"
    )
@@ -185,28 +184,47 @@ class Home(ui.LayoutView):
   hero.add_item(ui.Separator())
 
   tabs=ui.ActionRow()
-  for cat in CATS:
-   b=ui.Button(
-    label=cat,
-    style=discord.ButtonStyle.secondary,
-    custom_id="pb:home:"+cat.lower()
+  raids=ui.Button(
+   label="Raids",
+   style=discord.ButtonStyle.primary,
+   custom_id="pb:home:raids"
+  )
+  bosses=ui.Button(
+   label="Bosses",
+   style=discord.ButtonStyle.secondary,
+   custom_id="pb:home:bosses"
+  )
+  async def open_raids(i):
+   await i.response.send_message(
+    view=await Browser.make(i.guild_id,"Raids",0),
+    ephemeral=True
    )
-   async def clicked(i,chosen=cat):
-    await i.response.send_message(
-     view=await Browser.make(i.guild_id,chosen,0),
-     ephemeral=True
-    )
-   b.callback=clicked
-   tabs.add_item(b)
+  async def open_bosses(i):
+   await i.response.send_message(
+    view=await Browser.make(i.guild_id,"Bosses",0),
+    ephemeral=True
+   )
+  raids.callback=open_raids
+  bosses.callback=open_bosses
+  tabs.add_item(raids)
+  tabs.add_item(bosses)
   hero.add_item(tabs)
 
   records=ui.Container(accent_colour=BLUE)
-  raid_leaders=raid_leaders or {}
-  lines=["### RAID RECORDS"]
+  records.add_item(
+   ui.TextDisplay(
+    "### RAID RECORDS\n"
+    "-# TOP 3 APPROVED TIMES"
+   )
+  )
 
-  for activity in RAIDS:
+  raid_leaders=raid_leaders or {}
+  for idx,activity in enumerate(RAIDS):
+   if idx:
+    records.add_item(ui.Separator())
+
    results=raid_leaders.get(activity,[])
-   lines.append(f"\n**{clean(activity)}**")
+   lines=[f"### {clean(activity)}"]
    if results:
     for k,r in enumerate(results):
      lines.append(
@@ -216,7 +234,17 @@ class Home(ui.LayoutView):
    else:
     lines.append("-# No approved records yet.")
 
-  records.add_item(ui.TextDisplay("\n".join(lines)))
+   badge=ui.Button(
+    label="TOP 3",
+    style=discord.ButtonStyle.secondary,
+    disabled=True
+   )
+   records.add_item(
+    ui.Section(
+     ui.TextDisplay("\n".join(lines)),
+     accessory=badge
+    )
+   )
 
   self.add_item(hero)
   self.add_item(records)
@@ -239,43 +267,70 @@ class Browser(ui.LayoutView):
   activities=CATS[cat]
   name=list(activities)[index]
 
-  mast=ui.Container(accent_colour=GOLD)
-  mast.add_item(
-   ui.TextDisplay(
-    f"## ✦ NOVUS | {cat.upper()}\n"
-    f"### {clean(name)}\n"
-    f"-# {index+1} OF {len(activities)} · VERIFIED TOP 5"
-   )
-  )
+  panel=ui.Container(accent_colour=GOLD)
 
-  mast.add_item(ui.Separator())
+  tabs=ui.ActionRow()
+  raids=ui.Button(
+   label="Raids",
+   style=discord.ButtonStyle.primary if cat=="Raids" else discord.ButtonStyle.secondary
+  )
+  bosses=ui.Button(
+   label="Bosses",
+   style=discord.ButtonStyle.primary if cat=="Bosses" else discord.ButtonStyle.secondary
+  )
+  async def show_raids(i):
+   await i.response.edit_message(view=await Browser.make(self.g,"Raids",0))
+  async def show_bosses(i):
+   await i.response.edit_message(view=await Browser.make(self.g,"Bosses",0))
+  raids.callback=show_raids
+  bosses.callback=show_bosses
+  tabs.add_item(raids)
+  tabs.add_item(bosses)
+  panel.add_item(tabs)
+
+  panel.add_item(ui.Separator())
 
   nav=ui.ActionRow()
-  for label,offset in (("Previous",-1),("Next",1)):
-   b=ui.Button(label=label,style=discord.ButtonStyle.secondary)
-   async def move(i,delta=offset):
-    await i.response.edit_message(
-     view=await Browser.make(
-      self.g,
-      self.cat,
-      (self.index+delta)%len(CATS[self.cat])
-     )
-    )
-   b.callback=move
-   nav.add_item(b)
 
-  other="Bosses" if cat=="Raids" else "Raids"
-  swap=ui.Button(
-   label=other,
+  prev=ui.Button(
+   label="‹",
    style=discord.ButtonStyle.secondary
   )
-  async def swap_category(i):
+  current=ui.Button(
+   label=f"{clean(name)}  ·  {index+1}/{len(activities)}",
+   style=discord.ButtonStyle.secondary,
+   disabled=True
+  )
+  nxt=ui.Button(
+   label="›",
+   style=discord.ButtonStyle.secondary
+  )
+
+  async def move_prev(i):
    await i.response.edit_message(
-    view=await Browser.make(self.g,other,0)
+    view=await Browser.make(
+     self.g,self.cat,(self.index-1)%len(CATS[self.cat])
+    )
    )
-  swap.callback=swap_category
-  nav.add_item(swap)
-  mast.add_item(nav)
+  async def move_next(i):
+   await i.response.edit_message(
+    view=await Browser.make(
+     self.g,self.cat,(self.index+1)%len(CATS[self.cat])
+    )
+   )
+
+  prev.callback=move_prev
+  nxt.callback=move_next
+  nav.add_item(prev)
+  nav.add_item(current)
+  nav.add_item(nxt)
+  panel.add_item(nav)
+
+  panel.add_item(
+   ui.TextDisplay(
+    f"-# {cat.upper()} · ALL VARIANTS · VERIFIED TOP 5"
+   )
+  )
 
   rankings=ui.Container(accent_colour=BLUE)
 
@@ -283,18 +338,31 @@ class Browser(ui.LayoutView):
    if pos:
     rankings.add_item(ui.Separator())
 
-   lines=[f"### {clean(variant)}"]
+   lines=[]
    for k in range(5):
     if k>=len(results):
-     lines.append(f"**{MEDALS[k]}** —")
+     lines.append(f"{MEDALS[k]} —")
     else:
      r=results[k]
      lines.append(
-      f"**{MEDALS[k]}** **{fmt(r['ms'])}** · {clean(r['members'])}"
+      f"{MEDALS[k]} **{fmt(r['ms'])}** · {clean(r['members'])}"
      )
-   rankings.add_item(ui.TextDisplay("\n".join(lines)))
 
-  self.add_item(mast)
+   top_badge=ui.Button(
+    label="TOP 5",
+    style=discord.ButtonStyle.secondary,
+    disabled=True
+   )
+   rankings.add_item(
+    ui.Section(
+     ui.TextDisplay(
+      f"### {clean(variant)}\n" + "\n".join(lines)
+     ),
+     accessory=top_badge
+    )
+   )
+
+  self.add_item(panel)
   self.add_item(rankings)
 
  @classmethod
