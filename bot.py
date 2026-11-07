@@ -27,7 +27,7 @@ BOSSES={
  "Gauntlet":["Regular","Corrupted"],"Inferno":["Standard"],
  "Colosseum":["Standard"],"Doom":["Standard"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
-MEDALS=["🥇","🥈","🥉","4","5"]
+MEDALS=["1.","2.","3.","4.","5."]
 def now(): return datetime.now(timezone.utc).isoformat(timespec="seconds")
 def clean(v): return discord.utils.escape_mentions(discord.utils.escape_markdown(str(v)))
 def valid_url(v):
@@ -100,6 +100,10 @@ class Store:
  async def ranking(self,g,cat,a,v):
   return await self.all("""SELECT * FROM submissions WHERE guild=? AND category=? AND activity=? AND variant=?
   AND status='approved' ORDER BY ms,id LIMIT 5""",(g,cat,a,v))
+ async def recent_approved(self,g,limit=5):
+  return await self.all("""SELECT * FROM submissions
+  WHERE guild=? AND status='approved'
+  ORDER BY updated DESC,id DESC LIMIT ?""",(g,limit))
 store=Store()
 intents=discord.Intents.default()
 class PB(commands.Bot):
@@ -120,20 +124,35 @@ def is_staff(i):
  return m.guild_permissions.manage_guild or m.guild_permissions.administrator or bool(STAFF_ROLES.intersection(x.id for x in m.roles))
 
 class Home(ui.LayoutView):
- def __init__(self):
+ def __init__(self,recent=None):
   super().__init__(timeout=None)
   box=ui.Container(accent_colour=GOLD)
-  box.add_item(ui.TextDisplay("## ✦ NOVUS\n**PERSONAL BEST LEADERBOARDS**\n\n⚔ Raids  ·  ♛ Bosses\n\nBrowse the five fastest approved records. Your navigation opens privately."))
+  box.add_item(ui.TextDisplay(
+   "## NOVUS\n"
+   "**PERSONAL BEST LEADERBOARDS**\n\n"
+   "Browse the five fastest approved records by activity and team size."
+  ))
   box.add_item(ui.Separator())
   row=ui.ActionRow()
   for cat in CATS:
-   b=ui.Button(label="Browse "+cat,style=discord.ButtonStyle.secondary,custom_id="pb:home:"+cat.lower())
+   b=ui.Button(label=cat,style=discord.ButtonStyle.secondary,custom_id="pb:home:"+cat.lower())
    async def clicked(i,chosen=cat):
     await i.response.send_message(view=await Browser.make(i.guild_id,chosen,0),ephemeral=True)
    b.callback=clicked;row.add_item(b)
   box.add_item(row)
-  box.add_item(ui.TextDisplay("-# Submit new records with /pbsubmission. Staff review is required."))
+  if recent:
+   box.add_item(ui.Separator())
+   lines=["### RECENTLY APPROVED"]
+   for r in recent:
+    lines.append(
+     f"**{fmt(r['ms'])}** · {clean(r['activity'])} · {clean(r['variant'])}\n"
+     f"-# {clean(r['members'])}"
+    )
+   box.add_item(ui.TextDisplay("\n".join(lines)))
   self.add_item(box)
+ @classmethod
+ async def make(cls,g):
+  return cls(await store.recent_approved(g,5))
 
 class Browser(ui.LayoutView):
  def __init__(self,g,cat,index,blocks):
@@ -141,7 +160,7 @@ class Browser(ui.LayoutView):
   self.g=g;self.cat=cat;self.index=index
   activities=CATS[cat];name=list(activities)[index]
   head=ui.Container(accent_colour=GOLD)
-  head.add_item(ui.TextDisplay(f"## ✦ NOVUS | {cat.upper()}\n### {clean(name)}\n-# {index+1} OF {len(activities)} · ALL VARIANTS BELOW"))
+  head.add_item(ui.TextDisplay(f"## NOVUS | {cat.upper()}\n### {clean(name)}\n-# {index+1} OF {len(activities)} · ALL VARIANTS BELOW"))
   row=ui.ActionRow()
   for label,offset in (("◀ Previous",-1),("Next ▶",1)):
    b=ui.Button(label=label,style=discord.ButtonStyle.secondary)
@@ -155,10 +174,10 @@ class Browser(ui.LayoutView):
   for variant,results in blocks:
    lines=[f"### {clean(variant)} · TOP 5"]
    for k in range(5):
-    if k>=len(results):lines.append(f"{MEDALS[k]}  —")
+    if k>=len(results):lines.append(f"**{MEDALS[k]}** —")
     else:
      r=results[k]
-     lines.append(f"{MEDALS[k]} **{fmt(r['ms'])}** · {clean(r['members'])}")
+     lines.append(f"**{MEDALS[k]}** **{fmt(r['ms'])}** · {clean(r['members'])}")
    section=ui.Container(accent_colour=BLUE)
    section.add_item(ui.TextDisplay("\n".join(lines)))
    self.add_item(section)
@@ -173,10 +192,10 @@ class Review(ui.LayoutView):
   super().__init__(timeout=None if active else 60)
   self.sid=r["id"]
   panel=ui.Container(accent_colour=GOLD if active else BLUE)
-  p=r["proof"];proof=f"[Open proof]({p})" if p and valid_url(p) else "⚠ Not provided"
+  p=r["proof"];proof=f"[Open proof]({p})" if p and valid_url(p) else "Not provided"
   panel.add_item(ui.TextDisplay(
-   f"## ✦ NOVUS | PB REVIEW #{r['id']}\n**{clean(r['activity'])}** · {clean(r['variant'])}\n"
-   f"### ⏱ {fmt(r['ms'])}\n**Team:** {clean(r['members'])}\n"
+   f"## NOVUS | PB REVIEW #{r['id']}\n**{clean(r['activity'])}** · {clean(r['variant'])}\n"
+   f"### {fmt(r['ms'])}\n**Team:** {clean(r['members'])}\n"
    f"**Submitted by:** <@{r['submitter']}>\n**Proof:** {proof}\n"
    f"**Status:** {r['status'].replace('_',' ').title()}"))
   if active:
@@ -196,7 +215,7 @@ async def refresh_panel(g):
  try:
   ch=bot.get_channel(r["channel"]) or await bot.fetch_channel(r["channel"])
   msg=await ch.fetch_message(r["message"])
-  await msg.edit(view=Home())
+  await msg.edit(view=await Home.make(g))
  except discord.HTTPException:logging.exception("Unable to refresh public panel")
 
 async def update_review(r):
@@ -326,12 +345,12 @@ async def pbpanel(i:discord.Interaction):
   try:
    ch=bot.get_channel(old["channel"]) or await bot.fetch_channel(old["channel"])
    msg=await ch.fetch_message(old["message"])
-   await msg.edit(view=Home())
+   await msg.edit(view=await Home.make(i.guild_id))
    return await i.followup.send(f"Refreshed the existing panel in <#{ch.id}>.",ephemeral=True)
   except discord.HTTPException:
    logging.exception("Unable to refresh existing PB panel; creating a new one")
  try:
-  msg=await i.channel.send(view=Home())
+  msg=await i.channel.send(view=await Home.make(i.guild_id))
   await store.set_panel(i.guild_id,i.channel_id,msg.id)
   await i.followup.send("Created the PB panel. Pin the message.",ephemeral=True)
  except discord.Forbidden:
