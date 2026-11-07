@@ -652,9 +652,9 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    self.proof_input.value.strip()
   )
 
-@bot.tree.command(name="pbsubmission",description="Submit a new PB for staff review")
+@bot.tree.command(name="pbsubmit",description="Submit a new PB for staff review")
 @app_commands.guild_only()
-async def pbsubmission(i:discord.Interaction):
+async def pbsubmit(i:discord.Interaction):
  await i.response.send_modal(SubmitModal())
 
 @bot.tree.command(name="pbproof",description="Attach proof to your pending submission")
