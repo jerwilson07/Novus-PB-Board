@@ -151,65 +151,147 @@ def is_staff(i):
 class Home(ui.LayoutView):
  def __init__(self,recent=None):
   super().__init__(timeout=None)
-  box=ui.Container(accent_colour=GOLD)
-  box.add_item(ui.TextDisplay(
-   "## ✦ NOVUS\n"
-   "**PERSONAL BEST LEADERBOARDS**\n\n"
-   "Browse the five fastest approved records by activity and team size."
-  ))
-  box.add_item(ui.Separator())
+
+  panel=ui.Container(accent_colour=GOLD)
+  panel.add_item(
+   ui.TextDisplay(
+    "## ✦ NOVUS\n"
+    "**PERSONAL BEST LEADERBOARDS**\n"
+    "-# VERIFIED CLAN RECORDS\n\n"
+    "Browse the fastest approved Novus records across raids and bosses."
+   )
+  )
+
+  panel.add_item(ui.Separator())
+
   row=ui.ActionRow()
   for cat in CATS:
-   b=ui.Button(label=cat,style=discord.ButtonStyle.secondary,custom_id="pb:home:"+cat.lower())
+   b=ui.Button(
+    label=cat,
+    style=discord.ButtonStyle.secondary,
+    custom_id="pb:home:"+cat.lower()
+   )
    async def clicked(i,chosen=cat):
-    await i.response.send_message(view=await Browser.make(i.guild_id,chosen,0),ephemeral=True)
-   b.callback=clicked;row.add_item(b)
-  box.add_item(row)
+    await i.response.send_message(
+     view=await Browser.make(i.guild_id,chosen,0),
+     ephemeral=True
+    )
+   b.callback=clicked
+   row.add_item(b)
+  panel.add_item(row)
+
+  panel.add_item(ui.Separator())
+
+  lines=["### ✦ RECENTLY APPROVED"]
   if recent:
-   box.add_item(ui.Separator())
-   lines=["### RECENTLY APPROVED"]
    for r in recent:
     lines.append(
-     f"**{fmt(r['ms'])}** · {clean(r['activity'])} · {clean(r['variant'])}\n"
-     f"-# {clean(r['members'])}"
+     f"**{fmt(r['ms'])}**  ·  **{clean(r['activity'])}**\n"
+     f"-# {clean(r['variant'])} · {clean(r['members'])}"
     )
-   box.add_item(ui.TextDisplay("\n".join(lines)))
-  self.add_item(box)
+  else:
+   lines.append(
+    "-# No approved PBs yet. Newly approved records will appear here."
+   )
+  panel.add_item(ui.TextDisplay("\n\n".join(lines)))
+
+  panel.add_item(ui.Separator())
+  panel.add_item(
+   ui.TextDisplay(
+    "-# ✦ NOVUS PB ARCHIVE · Staff-verified records only"
+   )
+  )
+
+  self.add_item(panel)
+
  @classmethod
  async def make(cls,g):
   return cls(await store.recent_approved(g,5))
 
+
 class Browser(ui.LayoutView):
  def __init__(self,g,cat,index,blocks):
   super().__init__(timeout=900)
-  self.g=g;self.cat=cat;self.index=index
-  activities=CATS[cat];name=list(activities)[index]
-  head=ui.Container(accent_colour=GOLD)
-  head.add_item(ui.TextDisplay(f"## ✦ NOVUS | {cat.upper()}\n### {clean(name)}\n-# {index+1} OF {len(activities)} · ALL VARIANTS BELOW"))
-  row=ui.ActionRow()
-  for label,offset in (("◀ Previous",-1),("Next ▶",1)):
+  self.g=g
+  self.cat=cat
+  self.index=index
+
+  activities=CATS[cat]
+  name=list(activities)[index]
+
+  panel=ui.Container(accent_colour=BLUE)
+  panel.add_item(
+   ui.TextDisplay(
+    f"## ✦ NOVUS | {cat.upper()}\n"
+    f"### {clean(name)}\n"
+    f"-# {index+1} OF {len(activities)} · VERIFIED TOP 5 RECORDS"
+   )
+  )
+
+  panel.add_item(ui.Separator())
+
+  nav=ui.ActionRow()
+  for label,offset in (("Previous",-1),("Next",1)):
    b=ui.Button(label=label,style=discord.ButtonStyle.secondary)
    async def move(i,delta=offset):
-    await i.response.edit_message(view=await Browser.make(self.g,self.cat,(self.index+delta)%len(CATS[self.cat])))
-   b.callback=move;row.add_item(b)
+    await i.response.edit_message(
+     view=await Browser.make(
+      self.g,
+      self.cat,
+      (self.index+delta)%len(CATS[self.cat])
+     )
+    )
+   b.callback=move
+   nav.add_item(b)
+
   other="Bosses" if cat=="Raids" else "Raids"
-  b=ui.Button(label=other,style=discord.ButtonStyle.primary)
-  async def swap(i):await i.response.edit_message(view=await Browser.make(self.g,other,0))
-  b.callback=swap;row.add_item(b);head.add_item(row);self.add_item(head)
-  for variant,results in blocks:
-   lines=[f"### {clean(variant)} · TOP 5"]
+  swap=ui.Button(
+   label=other,
+   style=discord.ButtonStyle.primary
+  )
+  async def swap_category(i):
+   await i.response.edit_message(
+    view=await Browser.make(self.g,other,0)
+   )
+  swap.callback=swap_category
+  nav.add_item(swap)
+  panel.add_item(nav)
+
+  for pos,(variant,results) in enumerate(blocks):
+   panel.add_item(ui.Separator())
+   lines=[f"### {clean(variant)}"]
    for k in range(5):
-    if k>=len(results):lines.append(f"**{MEDALS[k]}** —")
+    if k>=len(results):
+     lines.append(f"**{MEDALS[k]}** —")
     else:
      r=results[k]
-     lines.append(f"**{MEDALS[k]}** **{fmt(r['ms'])}** · {clean(r['members'])}")
-   section=ui.Container(accent_colour=BLUE)
-   section.add_item(ui.TextDisplay("\n".join(lines)))
-   self.add_item(section)
+     lines.append(
+      f"**{MEDALS[k]}** **{fmt(r['ms'])}** · {clean(r['members'])}"
+     )
+   panel.add_item(ui.TextDisplay("\n".join(lines)))
+
+  panel.add_item(ui.Separator())
+  panel.add_item(
+   ui.TextDisplay(
+    "-# ✦ Use Previous / Next to browse activities"
+   )
+  )
+
+  self.add_item(panel)
+
  @classmethod
  async def make(cls,g,cat,index):
-  a=list(CATS[cat])[index]
-  return cls(g,cat,index,[(v,await store.ranking(g,cat,a,v)) for v in CATS[cat][a]])
+  activity=list(CATS[cat])[index]
+  return cls(
+   g,
+   cat,
+   index,
+   [
+    (variant,await store.ranking(g,cat,activity,variant))
+    for variant in CATS[cat][activity]
+   ]
+  )
+
 
 class Review(ui.LayoutView):
  def __init__(self,r):
