@@ -218,7 +218,7 @@ class Home(ui.LayoutView):
   raid_leaders=raid_leaders or {}
   for idx,activity in enumerate(RAIDS):
    if idx:
-    panel.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
+    panel.add_item(ui.Separator())
 
    results=raid_leaders.get(activity,[])
    lines=[f"**{clean(activity)}**"]
