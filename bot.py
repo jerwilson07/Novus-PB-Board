@@ -173,12 +173,18 @@ class Home(ui.LayoutView):
   panel.add_item(
    ui.TextDisplay(
     "## ✦ NOVUS\n"
-    "**PERSONAL BEST LEADERBOARDS**\n"
-    "-# VERIFIED CLAN RECORDS"
+    "### PERSONAL BEST LEADERBOARDS\n"
+    "-# CELESTIAL ARCHIVE · VERIFIED CLAN RECORDS"
    )
   )
 
   panel.add_item(ui.Separator())
+  panel.add_item(
+   ui.TextDisplay(
+    "**EXPLORE THE ARCHIVE**\n"
+    "-# Select a category to view the fastest verified Novus records."
+   )
+  )
 
   row=ui.ActionRow()
   for cat in CATS:
@@ -198,16 +204,16 @@ class Home(ui.LayoutView):
 
   panel.add_item(ui.Separator())
 
-  lines=["### ✦ RECENTLY APPROVED"]
+  lines=["### ✦ RECENTLY APPROVED", "-# LATEST VERIFIED RECORDS"]
   if recent:
    for r in recent:
     lines.append(
-     f"**{fmt(r['ms'])}**  ·  **{clean(r['activity'])}**\n"
+     f"✦ **{fmt(r['ms'])}**  ·  **{clean(r['activity'])}**\n"
      f"-# {clean(r['variant'])} · {clean(r['members'])}"
     )
   else:
    lines.append(
-    "-# No approved PBs yet. Newly approved records will appear here."
+    "-# The archive is empty. Newly approved PBs will appear here."
    )
   panel.add_item(ui.TextDisplay("\n\n".join(lines)))
 
@@ -233,11 +239,16 @@ class Browser(ui.LayoutView):
    ui.TextDisplay(
     f"## ✦ NOVUS | {cat.upper()}\n"
     f"### {clean(name)}\n"
-    f"-# {index+1} OF {len(activities)} · VERIFIED TOP 5 RECORDS"
+    f"-# CELESTIAL ARCHIVE · {index+1} OF {len(activities)} · VERIFIED TOP 5"
    )
   )
 
   panel.add_item(ui.Separator())
+  panel.add_item(
+   ui.TextDisplay(
+    "-# Browse verified records by mode and team size."
+   )
+  )
 
   nav=ui.ActionRow()
   for label,offset in (("Previous",-1),("Next",1)):
@@ -268,7 +279,7 @@ class Browser(ui.LayoutView):
 
   for pos,(variant,results) in enumerate(blocks):
    panel.add_item(ui.Separator())
-   lines=[f"### {clean(variant)}"]
+   lines=[f"### ✦ {clean(variant)}"]
    for k in range(5):
     if k>=len(results):
      lines.append(f"**{MEDALS[k]}** —")
@@ -282,7 +293,7 @@ class Browser(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(
    ui.TextDisplay(
-    "-# ✦ Use Previous / Next to browse activities"
+    "-# ✦ Navigate the archive with Previous / Next"
    )
   )
 
@@ -325,7 +336,7 @@ class Review(ui.LayoutView):
   panel.add_item(
    ui.Section(
     ui.TextDisplay(
-     f"## ✦ NOVUS | PB Review\n"
+     f"## ✦ NOVUS | PB REVIEW\n"
      f"**{clean(r['activity'])}** · {clean(r['variant'])}\n"
      f"-# Submission #{r['id']} · Submitted by <@{r['submitter']}>"
     ),
@@ -336,7 +347,7 @@ class Review(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(
    ui.TextDisplay(
-    f"-# SUBMITTED TIME\n"
+    f"-# ✦ SUBMITTED TIME\n"
     f"## {fmt(r['ms'])}\n"
     f"**{review_members(r)}**"
    )
@@ -347,7 +358,7 @@ class Review(ui.LayoutView):
   if p and valid_url(p):
    panel.add_item(
     ui.TextDisplay(
-     "### Proof\n"
+     "### ✦ PROOF\n"
      f"[Open submitted evidence]({p})"
     )
    )
@@ -358,7 +369,7 @@ class Review(ui.LayoutView):
   else:
    panel.add_item(
     ui.TextDisplay(
-     "### Proof\n"
+     "### ✦ PROOF\n"
      "**Awaiting evidence**\n"
      "-# Screenshot, clip, or URL will appear here."
     )
