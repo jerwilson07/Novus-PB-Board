@@ -169,6 +169,13 @@ class Store:
  async def ranking(self,g,cat,a,v):
   return await self.all("""SELECT * FROM submissions WHERE guild=? AND category=? AND activity=? AND variant=?
   AND status='approved' ORDER BY ms,id LIMIT 5""",(g,cat,a,v))
+ async def best_approved(self,g,cat,activity,variant):
+  return await self.one(
+   """SELECT * FROM submissions
+   WHERE guild=? AND category=? AND activity=? AND variant=?
+   AND status='approved' ORDER BY ms,id LIMIT 1""",
+   (g,cat,activity,variant)
+  )
  async def recent_approved(self,g,limit=5):
   return await self.all("""SELECT * FROM submissions
   WHERE guild=? AND status='approved'
@@ -191,7 +198,7 @@ class PB(commands.Bot):
   await store.open()
   self.add_view(Home())
   for r in await store.all("SELECT * FROM submissions WHERE status IN ('pending','awaiting_proof') AND review_message IS NOT NULL"):
-   self.add_view(Review(r),message_id=r["review_message"])
+   self.add_view(await Review.make(r),message_id=r["review_message"])
   if GUILD_ID:
    guild=discord.Object(id=GUILD_ID)
    self.tree.copy_global_to(guild=guild)
@@ -638,7 +645,7 @@ class Browser(ui.LayoutView):
 
 
 class Review(ui.LayoutView):
- def __init__(self,r):
+ def __init__(self,r,leader=None):
   active=r["status"] in ("pending","awaiting_proof")
   super().__init__(timeout=None if active else 60)
   self.sid=r["id"]
