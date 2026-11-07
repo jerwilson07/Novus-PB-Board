@@ -699,7 +699,6 @@ class Review(ui.LayoutView):
      f"Current #1: **{fmt(leader['ms'])}**  ·  "
      f"Submitted: **{fmt(r['ms'])}**"
     )
-   panel.add_item(ui.Separator())
    panel.add_item(ui.TextDisplay(
     comparison+"\n-# Compare within the same mode; verify date, membership, and proof."
    ))
