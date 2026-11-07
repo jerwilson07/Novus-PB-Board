@@ -258,9 +258,8 @@ class Review(ui.LayoutView):
      "-# Screenshot, clip, or URL will appear here."
     )
    )
-  self.add_item(proof_panel)
-
   if active:
+   proof_panel.add_item(ui.Separator())
    decision_row=ui.ActionRow()
    approve=ui.Button(
     label="Approve",
@@ -278,7 +277,7 @@ class Review(ui.LayoutView):
    deny.callback=deny_clicked
    decision_row.add_item(approve)
    decision_row.add_item(deny)
-   self.add_item(decision_row)
+   proof_panel.add_item(decision_row)
 
    proof_row=ui.ActionRow()
    request=ui.Button(
@@ -289,7 +288,9 @@ class Review(ui.LayoutView):
    async def request_clicked(i):await decide(i,self.sid,"request")
    request.callback=request_clicked
    proof_row.add_item(request)
-   self.add_item(proof_row)
+   proof_panel.add_item(proof_row)
+
+  self.add_item(proof_panel)
 
 async def refresh_panel(g):
  r=await store.panel(g)
