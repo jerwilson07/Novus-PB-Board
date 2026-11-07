@@ -13,8 +13,8 @@ GUILD_ID=int(os.getenv("GUILD_ID","0"))
 REVIEW_ID=int(os.getenv("REVIEW_CHANNEL_ID","0"))
 DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
 STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.strip().isdigit()}
-GOLD=0xD9A75B
-BLUE=0x346B9E
+GOLD=0xC8975D
+BLUE=0x2F8CE0
 PB_BANNER_PATH="assets/novus_pb_banner.jpg"
 PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e56d115997dde7d1696ef4c535ce366da87ba84b/assets/novus_pb_banner.jpg"
 RAIDS={
@@ -203,8 +203,7 @@ class Home(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(
    ui.TextDisplay(
-    "### RAID RECORDS\n"
-    "-# FASTEST VERIFIED RUNS"
+    "### RAID RECORDS"
    )
   )
 
@@ -321,13 +320,6 @@ class Browser(ui.LayoutView):
       f"**{MEDALS[k]}** **{fmt(r['ms'])}** · {clean(r['members'])}"
      )
    panel.add_item(ui.TextDisplay("\n".join(lines)))
-
-  panel.add_item(ui.Separator())
-  panel.add_item(
-   ui.TextDisplay(
-    "-# Previous / Next to browse activities"
-   )
-  )
 
   self.add_item(panel)
 
