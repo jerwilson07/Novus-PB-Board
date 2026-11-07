@@ -22,6 +22,12 @@ RAIDS={
  "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
  "Chambers of Xeric":["Normal · Solo","Normal · Duo","Normal · Trio","Normal · 5-Man","Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
  "Tombs of Amascut":["Expert · Solo","Expert · 8-Man"]}
+RAID_LABELS={
+ "The Fractured Archive":"TFA",
+ "Theatre of Blood":"ToB",
+ "Chambers of Xeric":"CoX",
+ "Tombs of Amascut":"ToA",
+}
 BOSSES={
  "Vardorvis":["Normal","Awakened"],"Duke Sucellus":["Normal","Awakened"],
  "Leviathan":["Normal","Awakened"],"The Whisperer":["Normal","Awakened"],
@@ -176,45 +182,58 @@ class Home(ui.LayoutView):
 
   hero.add_item(
    ui.TextDisplay(
-    "### PERSONAL BEST LEADERBOARDS\n"
-    "-# VERIFIED CLAN RECORDS"
+    "## NOVUS PERSONAL BEST LEADERBOARD\n"
+    "-# VERIFIED CLAN RECORDS · SELECT A RAID TO BROWSE"
    )
   )
 
   hero.add_item(ui.Separator())
 
-  tabs=ui.ActionRow()
-  raids=ui.Button(
-   label="Raids",
-   style=discord.ButtonStyle.primary,
-   custom_id="pb:home:raids"
-  )
+  raid_row=ui.ActionRow()
+  for raid_index,activity in enumerate(RAIDS):
+   short=RAID_LABELS[activity]
+   raid_button=ui.Button(
+    label=short,
+    style=discord.ButtonStyle.primary,
+    custom_id=f"pb:home:raid:{raid_index}"
+   )
+
+   async def open_raid(i,idx=raid_index):
+    await i.response.send_message(
+     view=await RaidBrowser.make(i.guild_id,idx,0),
+     ephemeral=True
+    )
+
+   raid_button.callback=open_raid
+   raid_row.add_item(raid_button)
+
   bosses=ui.Button(
    label="Bosses",
    style=discord.ButtonStyle.secondary,
    custom_id="pb:home:bosses"
   )
-  async def open_raids(i):
-   await i.response.send_message(
-    view=await Browser.make(i.guild_id,"Raids",0),
-    ephemeral=True
-   )
+
   async def open_bosses(i):
    await i.response.send_message(
     view=await Browser.make(i.guild_id,"Bosses",0),
     ephemeral=True
    )
-  raids.callback=open_raids
+
   bosses.callback=open_bosses
-  tabs.add_item(raids)
-  tabs.add_item(bosses)
-  hero.add_item(tabs)
+  raid_row.add_item(bosses)
+  hero.add_item(raid_row)
+
+  hero.add_item(
+   ui.TextDisplay(
+    "-# TFA = THE FRACTURED ARCHIVE · USE /pbsubmit TO SUBMIT A RECORD"
+   )
+  )
 
   records=ui.Container(accent_colour=BLUE)
   records.add_item(
    ui.TextDisplay(
     "### RAID RECORDS\n"
-    "-# TOP 3 APPROVED TIMES"
+    "-# FASTEST APPROVED TIMES ACROSS EACH RAID"
    )
   )
 
@@ -224,11 +243,19 @@ class Home(ui.LayoutView):
     records.add_item(ui.Separator())
 
    results=raid_leaders.get(activity,[])
-   lines=[f"### {clean(activity)}"]
+   lines=[
+    f"### {RAID_LABELS[activity]} · {clean(activity)}"
+   ]
+
    if results:
     for k,r in enumerate(results):
+     proof=(
+      f" · [proof]({r['proof']})"
+      if r["proof"] and valid_url(r["proof"])
+      else ""
+     )
      lines.append(
-      f"{MEDALS[k]} **{fmt(r['ms'])}** · {clean(r['variant'])}\n"
+      f"{MEDALS[k]} **{fmt(r['ms'])}** · {clean(r['variant'])}{proof}\n"
       f"-# {clean(r['members'])}"
      )
    else:
@@ -255,6 +282,197 @@ class Home(ui.LayoutView):
    activity:await store.raid_top3(g,activity)
    for activity in RAIDS
   })
+
+
+class RaidBrowser(ui.LayoutView):
+ def __init__(self,g,raid_index,variant_index,results):
+  super().__init__(timeout=900)
+  self.g=g
+  self.raid_index=raid_index
+  self.variant_index=variant_index
+
+  activities=list(RAIDS)
+  activity=activities[raid_index]
+  variants=RAIDS[activity]
+  variant=variants[variant_index]
+
+  panel=ui.Container(accent_colour=GOLD)
+
+  panel.add_item(
+   ui.TextDisplay(
+    f"## {RAID_LABELS[activity]} · {clean(activity)}\n"
+    f"-# VERIFIED NOVUS PERSONAL BESTS · RAID {raid_index+1}/{len(activities)}"
+   )
+  )
+
+  raid_row=ui.ActionRow()
+  for idx,name in enumerate(activities):
+   button=ui.Button(
+    label=RAID_LABELS[name],
+    style=(
+     discord.ButtonStyle.primary
+     if idx==raid_index
+     else discord.ButtonStyle.secondary
+    )
+   )
+
+   async def switch_raid(i,target=idx):
+    await i.response.edit_message(
+     view=await RaidBrowser.make(self.g,target,0)
+    )
+
+   button.callback=switch_raid
+   raid_row.add_item(button)
+
+  bosses=ui.Button(
+   label="Bosses",
+   style=discord.ButtonStyle.secondary
+  )
+
+  async def open_bosses(i):
+   await i.response.edit_message(
+    view=await Browser.make(self.g,"Bosses",0)
+   )
+
+  bosses.callback=open_bosses
+  raid_row.add_item(bosses)
+  panel.add_item(raid_row)
+
+  panel.add_item(ui.Separator())
+
+  variant_select=ui.Select(
+   placeholder="Choose mode / team size",
+   min_values=1,
+   max_values=1,
+   options=[
+    discord.SelectOption(
+     label=name,
+     value=str(idx),
+     default=idx==variant_index
+    )
+    for idx,name in enumerate(variants)
+   ]
+  )
+
+  async def choose_variant(i):
+   target=int(variant_select.values[0])
+   await i.response.edit_message(
+    view=await RaidBrowser.make(
+     self.g,
+     self.raid_index,
+     target
+    )
+   )
+
+  variant_select.callback=choose_variant
+  variant_row=ui.ActionRow()
+  variant_row.add_item(variant_select)
+  panel.add_item(variant_row)
+
+  rankings=ui.Container(accent_colour=BLUE)
+  rankings.add_item(
+   ui.TextDisplay(
+    f"### {clean(variant)} · TOP 5\n"
+    "-# FASTEST APPROVED TIMES"
+   )
+  )
+  rankings.add_item(ui.Separator())
+
+  lines=[]
+  for k in range(5):
+   if k>=len(results):
+    lines.append(f"{MEDALS[k]} —")
+    continue
+
+   r=results[k]
+   proof=(
+    f" · [↗ proof]({r['proof']})"
+    if r["proof"] and valid_url(r["proof"])
+    else ""
+   )
+   lines.append(
+    f"{MEDALS[k]} **{fmt(r['ms'])}**{proof}\n"
+    f"-# {clean(r['members'])}"
+   )
+
+  rankings.add_item(
+   ui.TextDisplay("\n".join(lines))
+  )
+
+  nav=ui.ActionRow()
+  prev=ui.Button(
+   label="‹ Previous",
+   style=discord.ButtonStyle.secondary
+  )
+  page=ui.Button(
+   label=f"{variant_index+1}/{len(variants)}",
+   style=discord.ButtonStyle.secondary,
+   disabled=True
+  )
+  nxt=ui.Button(
+   label="Next ›",
+   style=discord.ButtonStyle.secondary
+  )
+  overview=ui.Button(
+   label="Overview",
+   style=discord.ButtonStyle.secondary
+  )
+
+  async def move_prev(i):
+   await i.response.edit_message(
+    view=await RaidBrowser.make(
+     self.g,
+     self.raid_index,
+     (self.variant_index-1)%len(variants)
+    )
+   )
+
+  async def move_next(i):
+   await i.response.edit_message(
+    view=await RaidBrowser.make(
+     self.g,
+     self.raid_index,
+     (self.variant_index+1)%len(variants)
+    )
+   )
+
+  async def show_overview(i):
+   await i.response.edit_message(
+    view=await Home.make(self.g)
+   )
+
+  prev.callback=move_prev
+  nxt.callback=move_next
+  overview.callback=show_overview
+  nav.add_item(prev)
+  nav.add_item(page)
+  nav.add_item(nxt)
+  nav.add_item(overview)
+  rankings.add_item(nav)
+
+  self.add_item(panel)
+  self.add_item(rankings)
+
+ @classmethod
+ async def make(cls,g,raid_index,variant_index):
+  activities=list(RAIDS)
+  raid_index%=len(activities)
+  activity=activities[raid_index]
+  variants=RAIDS[activity]
+  variant_index%=len(variants)
+  variant=variants[variant_index]
+  results=await store.ranking(
+   g,
+   "Raids",
+   activity,
+   variant
+  )
+  return cls(
+   g,
+   raid_index,
+   variant_index,
+   results
+  )
 
 
 class Browser(ui.LayoutView):
@@ -483,6 +701,22 @@ async def refresh_panel(g):
   msg=await ch.fetch_message(r["message"])
   await msg.edit(view=await Home.make(g))
  except discord.HTTPException:logging.exception("Unable to refresh public panel")
+
+@bot.event
+async def on_ready():
+ if getattr(bot,"_pb_panel_refreshed",False):
+  return
+ bot._pb_panel_refreshed=True
+ for record in await store.all("SELECT guild FROM panels"):
+  try:
+   await refresh_panel(record["guild"])
+  except Exception:
+   logging.exception(
+    "Unable to refresh PB panel on startup for guild %s",
+    record["guild"]
+   )
+ logging.info("Novus PB bot ready as %s",bot.user)
+
 
 async def update_review(r):
  if not r["review_message"]:return
