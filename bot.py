@@ -62,6 +62,12 @@ def team_size(cat,variant):
  if "Trio" in variant:return 3
  m=re.search(r"(\d+)-Man",variant);return int(m.group(1)) if m else None
 
+def review_members(r):
+ try: raw=r["member_ids"]
+ except (KeyError,IndexError): raw=None
+ ids=[x.strip() for x in (raw or "").split(",") if x.strip().isdigit()]
+ return " · ".join(f"<@{x}>" for x in ids) if ids else clean(r["members"])
+
 class Store:
  def __init__(self):self.conn=None;self.lock=asyncio.Lock()
  async def open(self):
@@ -72,19 +78,23 @@ class Store:
   await self.conn.executescript("""CREATE TABLE IF NOT EXISTS submissions(
   id INTEGER PRIMARY KEY AUTOINCREMENT,guild INTEGER NOT NULL,submitter INTEGER NOT NULL,
   category TEXT NOT NULL,activity TEXT NOT NULL,variant TEXT NOT NULL,
-  members TEXT NOT NULL,ms INTEGER NOT NULL,proof TEXT,status TEXT NOT NULL DEFAULT 'pending',
+  members TEXT NOT NULL,member_ids TEXT,ms INTEGER NOT NULL,proof TEXT,status TEXT NOT NULL DEFAULT 'pending',
   reviewer INTEGER,review_channel INTEGER,review_message INTEGER,created TEXT,updated TEXT);
   CREATE INDEX IF NOT EXISTS pb_rank ON submissions(guild,category,activity,variant,status,ms);
   CREATE TABLE IF NOT EXISTS panels(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
+  async with self.conn.execute("PRAGMA table_info(submissions)") as c:
+   columns={row[1] async for row in c}
+  if "member_ids" not in columns:
+   await self.conn.execute("ALTER TABLE submissions ADD COLUMN member_ids TEXT")
   await self.conn.commit()
  async def one(self,q,args=()):
   async with self.conn.execute(q,args) as c:return await c.fetchone()
  async def all(self,q,args=()):
   async with self.conn.execute(q,args) as c:return await c.fetchall()
- async def add(self,g,u,cat,act,v,m,ms,p):
+ async def add(self,g,u,cat,act,v,m,member_ids,ms,p):
   async with self.lock:
-   c=await self.conn.execute("""INSERT INTO submissions(guild,submitter,category,activity,variant,members,ms,proof,created,updated)
-   VALUES(?,?,?,?,?,?,?,?,?,?)""",(g,u,cat,act,v,m,ms,p,now(),now()))
+   c=await self.conn.execute("""INSERT INTO submissions(guild,submitter,category,activity,variant,members,member_ids,ms,proof,created,updated)
+   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",(g,u,cat,act,v,m,member_ids,ms,p,now(),now()))
    await self.conn.commit();return c.lastrowid
  async def change(self,sid,prev,target,reviewer=None,proof=None):
   async with self.lock:
@@ -230,7 +240,7 @@ class Review(ui.LayoutView):
    ui.TextDisplay(
     f"-# SUBMITTED TIME\n"
     f"## {fmt(r['ms'])}\n"
-    f"**{clean(r['members'])}**"
+    f"**{review_members(r)}**"
    )
   )
 
@@ -331,18 +341,24 @@ async def decide(i,sid,choice):
 async def submit(i,cat,act,variant,t,members,proof):
  try:ms=parse_ms(t)
  except ValueError as e:return await i.response.send_message(str(e),ephemeral=True)
- rsns=[x.strip() for x in members.split(",") if x.strip()]
+
  required=team_size(cat,variant)
- if not rsns or any(len(x)>12 for x in rsns) or len({x.lower() for x in rsns})!=len(rsns):
-  return await i.response.send_message("Use unique, valid RuneScape names (12 characters max).",ephemeral=True)
- if required is not None and len(rsns)!=required:
-  return await i.response.send_message(f"Expected {required} RSNs for this category.",ephemeral=True)
+ if not members:
+  return await i.response.send_message("Select at least one party member.",ephemeral=True)
+ if required is not None and len(members)!=required:
+  return await i.response.send_message(f"Expected {required} Discord member(s) for this category.",ephemeral=True)
+ if len({m.id for m in members})!=len(members):
+  return await i.response.send_message("Each party member can only be selected once.",ephemeral=True)
  if proof and not valid_url(proof):
   return await i.response.send_message("Provide an HTTP(S) proof link, or add proof later with /pbproof.",ephemeral=True)
+
  try:ch=bot.get_channel(REVIEW_ID) or await bot.fetch_channel(REVIEW_ID)
  except discord.HTTPException:return await i.response.send_message("Staff review channel not available.",ephemeral=True)
+
  await i.response.defer(thinking=True,ephemeral=True)
- sid=await store.add(i.guild_id,i.user.id,cat,act,variant,", ".join(rsns),ms,proof)
+ names=", ".join(m.display_name for m in members)
+ member_ids=",".join(str(m.id) for m in members)
+ sid=await store.add(i.guild_id,i.user.id,cat,act,variant,names,member_ids,ms,proof)
  r=await store.one("SELECT * FROM submissions WHERE id=?",(sid,))
  try:
   message=await ch.send(view=Review(r),allowed_mentions=discord.AllowedMentions.none())
@@ -389,9 +405,10 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    max_length=20,
    custom_id="pb:submit:time"
   )
-  self.members_input=ui.TextInput(
-   placeholder="Vecs, Mohi, Hokage",
-   max_length=240,
+  self.members_select=ui.UserSelect(
+   placeholder="Search Discord members",
+   min_values=1,
+   max_values=8,
    custom_id="pb:submit:members"
   )
   self.proof_input=ui.TextInput(
@@ -424,9 +441,9 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   )
   self.add_item(
    ui.Label(
-    text="Member RSNs",
-    description="Comma-separated RuneScape names.",
-    component=self.members_input
+    text="Party members",
+    description="Start typing a Discord name, then select the matching member(s).",
+    component=self.members_select
    )
   )
   self.add_item(
@@ -456,7 +473,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    activity,
    variant,
    self.time_input.value,
-   self.members_input.value,
+   self.members_select.values,
    self.proof_input.value.strip()
   )
 
