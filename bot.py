@@ -15,7 +15,6 @@ DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
 STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.strip().isdigit()}
 GOLD=0xD9A75B
 BLUE=0x346B9E
-PB_BANNER_URL="attachment://novus_pb_banner.jpg"
 PB_BANNER_PATH="assets/novus_pb_banner.jpg"
 RAIDS={
  "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
@@ -151,17 +150,18 @@ def is_staff(i):
  return m.guild_permissions.manage_guild or m.guild_permissions.administrator or bool(STAFF_ROLES.intersection(x.id for x in m.roles))
 
 class Home(ui.LayoutView):
- def __init__(self,recent=None):
+ def __init__(self,recent=None,banner_url=None):
   super().__init__(timeout=None)
 
   panel=ui.Container(accent_colour=GOLD)
 
-  banner=ui.MediaGallery()
-  banner.add_item(
-   media=PB_BANNER_URL,
-   description="Novus OSRS PvM Clan celestial banner"
-  )
-  panel.add_item(banner)
+  if banner_url:
+   banner=ui.MediaGallery()
+   banner.add_item(
+    media=banner_url,
+    description="Novus OSRS PvM Clan celestial banner"
+   )
+   panel.add_item(banner)
 
   panel.add_item(
    ui.TextDisplay(
@@ -207,8 +207,8 @@ class Home(ui.LayoutView):
   self.add_item(panel)
 
  @classmethod
- async def make(cls,g):
-  return cls(await store.recent_approved(g,5))
+ async def make(cls,g,banner_url=None):
+  return cls(await store.recent_approved(g,5),banner_url)
 
 
 class Browser(ui.LayoutView):
@@ -397,7 +397,8 @@ async def refresh_panel(g):
  try:
   ch=bot.get_channel(r["channel"]) or await bot.fetch_channel(r["channel"])
   msg=await ch.fetch_message(r["message"])
-  await msg.edit(view=await Home.make(g))
+  banner_url=msg.attachments[0].url if msg.attachments else None
+  await msg.edit(view=await Home.make(g,banner_url))
  except discord.HTTPException:logging.exception("Unable to refresh public panel")
 
 async def update_review(r):
@@ -645,19 +646,17 @@ async def pbpanel(i:discord.Interaction):
    ch=bot.get_channel(old["channel"]) or await bot.fetch_channel(old["channel"])
    msg=await ch.fetch_message(old["message"])
    banner_file=discord.File(PB_BANNER_PATH,filename="novus_pb_banner.jpg")
-   await msg.edit(
-    view=await Home.make(i.guild_id),
-    attachments=[banner_file]
-   )
+   msg=await msg.edit(attachments=[banner_file])
+   banner_url=msg.attachments[0].url if msg.attachments else None
+   await msg.edit(view=await Home.make(i.guild_id,banner_url))
    return await i.followup.send(f"Refreshed the existing panel in <#{ch.id}>.",ephemeral=True)
   except discord.HTTPException:
    logging.exception("Unable to refresh existing PB panel; creating a new one")
  try:
   banner_file=discord.File(PB_BANNER_PATH,filename="novus_pb_banner.jpg")
-  msg=await i.channel.send(
-   view=await Home.make(i.guild_id),
-   file=banner_file
-  )
+  msg=await i.channel.send(file=banner_file)
+  banner_url=msg.attachments[0].url if msg.attachments else None
+  await msg.edit(view=await Home.make(i.guild_id,banner_url))
   await store.set_panel(i.guild_id,i.channel_id,msg.id)
   await i.followup.send("Created the PB panel. Pin the message.",ephemeral=True)
  except discord.Forbidden:
