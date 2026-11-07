@@ -15,7 +15,8 @@ DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
 STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.strip().isdigit()}
 GOLD=0xD9A75B
 BLUE=0x346B9E
-PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/main/assets/novus_pb_banner.jpg"
+PB_BANNER_URL="attachment://novus_pb_banner.jpg"
+PB_BANNER_PATH="assets/novus_pb_banner.jpg"
 RAIDS={
  "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
  "Chambers of Xeric":["Normal · Solo","Normal · Duo","Normal · Trio","Normal · 5-Man","Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
@@ -643,12 +644,20 @@ async def pbpanel(i:discord.Interaction):
   try:
    ch=bot.get_channel(old["channel"]) or await bot.fetch_channel(old["channel"])
    msg=await ch.fetch_message(old["message"])
-   await msg.edit(view=await Home.make(i.guild_id))
+   banner_file=discord.File(PB_BANNER_PATH,filename="novus_pb_banner.jpg")
+   await msg.edit(
+    view=await Home.make(i.guild_id),
+    attachments=[banner_file]
+   )
    return await i.followup.send(f"Refreshed the existing panel in <#{ch.id}>.",ephemeral=True)
   except discord.HTTPException:
    logging.exception("Unable to refresh existing PB panel; creating a new one")
  try:
-  msg=await i.channel.send(view=await Home.make(i.guild_id))
+  banner_file=discord.File(PB_BANNER_PATH,filename="novus_pb_banner.jpg")
+  msg=await i.channel.send(
+   view=await Home.make(i.guild_id),
+   file=banner_file
+  )
   await store.set_panel(i.guild_id,i.channel_id,msg.id)
   await i.followup.send("Created the PB panel. Pin the message.",ephemeral=True)
  except discord.Forbidden:
