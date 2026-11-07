@@ -128,7 +128,7 @@ class Home(ui.LayoutView):
   super().__init__(timeout=None)
   box=ui.Container(accent_colour=GOLD)
   box.add_item(ui.TextDisplay(
-   "## NOVUS\n"
+   "## ✦ NOVUS\n"
    "**PERSONAL BEST LEADERBOARDS**\n\n"
    "Browse the five fastest approved records by activity and team size."
   ))
@@ -160,7 +160,7 @@ class Browser(ui.LayoutView):
   self.g=g;self.cat=cat;self.index=index
   activities=CATS[cat];name=list(activities)[index]
   head=ui.Container(accent_colour=GOLD)
-  head.add_item(ui.TextDisplay(f"## NOVUS | {cat.upper()}\n### {clean(name)}\n-# {index+1} OF {len(activities)} · ALL VARIANTS BELOW"))
+  head.add_item(ui.TextDisplay(f"## ✦ NOVUS | {cat.upper()}\n### {clean(name)}\n-# {index+1} OF {len(activities)} · ALL VARIANTS BELOW"))
   row=ui.ActionRow()
   for label,offset in (("◀ Previous",-1),("Next ▶",1)):
    b=ui.Button(label=label,style=discord.ButtonStyle.secondary)
@@ -194,7 +194,7 @@ class Review(ui.LayoutView):
   panel=ui.Container(accent_colour=GOLD if active else BLUE)
   p=r["proof"];proof=f"[Open proof]({p})" if p and valid_url(p) else "Not provided"
   panel.add_item(ui.TextDisplay(
-   f"## NOVUS | PB REVIEW #{r['id']}\n**{clean(r['activity'])}** · {clean(r['variant'])}\n"
+   f"## ✦ NOVUS | PB REVIEW #{r['id']}\n**{clean(r['activity'])}** · {clean(r['variant'])}\n"
    f"### {fmt(r['ms'])}\n**Team:** {clean(r['members'])}\n"
    f"**Submitted by:** <@{r['submitter']}>\n**Proof:** {proof}\n"
    f"**Status:** {r['status'].replace('_',' ').title()}"))
