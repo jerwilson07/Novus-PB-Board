@@ -16,7 +16,7 @@ STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.stri
 GOLD=0xD9A75B
 BLUE=0x346B9E
 PB_BANNER_PATH="assets/novus_pb_banner.jpg"
-PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e56d115997dde7d1696ef4c535ce366da87ba84b/assets/novus_pb_banner.jpg"
+PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/45fd04b34420f7daf918ac2e65f72605410fe33d/assets/novus_pb_banner.jpg"
 RAIDS={
  "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
  "Chambers of Xeric":["Normal · Solo","Normal · Duo","Normal · Trio","Normal · 5-Man","Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
@@ -215,7 +215,7 @@ class Home(ui.LayoutView):
 
  @classmethod
  async def make(cls,g):
-  return cls(await store.recent_approved(g,5))
+  return cls(await store.recent_approved(g,3))
 
 
 class Browser(ui.LayoutView):
