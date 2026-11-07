@@ -200,7 +200,6 @@ class Review(ui.LayoutView):
   super().__init__(timeout=None if active else 60)
   self.sid=r["id"]
   status=r["status"].replace("_"," ").title()
-
   status_style={
    "pending":discord.ButtonStyle.secondary,
    "awaiting_proof":discord.ButtonStyle.primary,
@@ -208,14 +207,14 @@ class Review(ui.LayoutView):
    "denied":discord.ButtonStyle.danger,
   }.get(r["status"],discord.ButtonStyle.secondary)
 
+  panel=ui.Container(accent_colour=GOLD)
   status_badge=ui.Button(
    label=status,
    style=status_style,
    disabled=True,
    custom_id=f"pb:status:{self.sid}"
   )
-  header=ui.Container(accent_colour=GOLD)
-  header.add_item(
+  panel.add_item(
    ui.Section(
     ui.TextDisplay(
      f"## ✦ NOVUS | PB Review\n"
@@ -225,22 +224,20 @@ class Review(ui.LayoutView):
     accessory=status_badge
    )
   )
-  self.add_item(header)
 
-  time_panel=ui.Container(accent_colour=BLUE)
-  time_panel.add_item(
+  panel.add_item(ui.Separator())
+  panel.add_item(
    ui.TextDisplay(
     f"-# SUBMITTED TIME\n"
     f"## {fmt(r['ms'])}\n"
     f"**{clean(r['members'])}**"
    )
   )
-  self.add_item(time_panel)
 
-  proof_panel=ui.Container(accent_colour=GOLD)
+  panel.add_item(ui.Separator())
   p=r["proof"]
   if p and valid_url(p):
-   proof_panel.add_item(
+   panel.add_item(
     ui.TextDisplay(
      "### Proof\n"
      f"[Open submitted evidence]({p})"
@@ -249,17 +246,18 @@ class Review(ui.LayoutView):
    if proof_looks_like_media(p):
     gallery=ui.MediaGallery()
     gallery.add_item(media=p,description="Submitted PB proof")
-    proof_panel.add_item(gallery)
+    panel.add_item(gallery)
   else:
-   proof_panel.add_item(
+   panel.add_item(
     ui.TextDisplay(
      "### Proof\n"
      "**Awaiting evidence**\n"
      "-# Screenshot, clip, or URL will appear here."
     )
    )
+
   if active:
-   proof_panel.add_item(ui.Separator())
+   panel.add_item(ui.Separator())
    decision_row=ui.ActionRow()
    approve=ui.Button(
     label="Approve",
@@ -277,7 +275,7 @@ class Review(ui.LayoutView):
    deny.callback=deny_clicked
    decision_row.add_item(approve)
    decision_row.add_item(deny)
-   proof_panel.add_item(decision_row)
+   panel.add_item(decision_row)
 
    proof_row=ui.ActionRow()
    request=ui.Button(
@@ -288,9 +286,9 @@ class Review(ui.LayoutView):
    async def request_clicked(i):await decide(i,self.sid,"request")
    request.callback=request_clicked
    proof_row.add_item(request)
-   proof_panel.add_item(proof_row)
+   panel.add_item(proof_row)
 
-  self.add_item(proof_panel)
+  self.add_item(panel)
 
 async def refresh_panel(g):
  r=await store.panel(g)
@@ -354,41 +352,118 @@ async def submit(i,cat,act,variant,t,members,proof):
   return await i.followup.send(f"Submission #{sid} saved, but staff delivery failed. Notify staff.",ephemeral=True)
  await i.followup.send(f"PB #{sid} submitted for staff review! "+("Proof received." if proof else "Add proof with /pbproof."),ephemeral=True)
 
+def submission_select_options(category):
+ options=[]
+ for activity,variants in CATS[category].items():
+  for variant in variants:
+   options.append(
+    discord.SelectOption(
+     label=f"{activity} · {variant}",
+     value=f"{activity}|||{variant}"
+    )
+   )
+ return options
+
 class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
- time=ui.TextInput(label="Completion time",placeholder="14:32.60",max_length=20)
- members=ui.TextInput(label="Member RSNs (comma-separated)",placeholder="Vecs, Mohi, Hokage",max_length=240)
- proof=ui.TextInput(label="Proof URL (optional)",placeholder="https://...",required=False,max_length=500)
- def __init__(self,cat,act,variant):super().__init__();self.cat=cat;self.act=act;self.variant=variant
- async def on_submit(self,i):await submit(i,self.cat,self.act,self.variant,self.time.value,self.members.value,self.proof.value.strip())
-class Variant(ui.Select):
- def __init__(self,cat,act):
-  super().__init__(placeholder="Choose mode and team size",options=[discord.SelectOption(label=x,value=x) for x in CATS[cat][act]])
-  self.cat=cat;self.act=act
- async def callback(self,i):await i.response.send_modal(SubmitModal(self.cat,self.act,self.values[0]))
-class ChooseVariant(ui.View):
- def __init__(self,cat,act):super().__init__(timeout=300);self.add_item(Variant(cat,act))
-class Activity(ui.Select):
- def __init__(self,cat):
-  super().__init__(placeholder="Choose activity",options=[discord.SelectOption(label=x,value=x) for x in CATS[cat]])
-  self.cat=cat
- async def callback(self,i):
-  a=self.values[0]
-  await i.response.edit_message(content=f"**{clean(a)}** · Select a variant:",view=ChooseVariant(self.cat,a))
-class ChooseActivity(ui.View):
- def __init__(self,cat):super().__init__(timeout=300);self.add_item(Activity(cat))
-class ChooseCategory(ui.View):
  def __init__(self):
   super().__init__(timeout=300)
-  for cat in CATS:
-   b=ui.Button(label=cat,style=discord.ButtonStyle.primary)
-   async def clicked(i,target=cat):
-    await i.response.edit_message(content=f"Choose a {target.lower()} activity:",view=ChooseActivity(target))
-   b.callback=clicked;self.add_item(b)
+
+  self.raid_select=ui.Select(
+   placeholder="Choose raid and mode",
+   options=submission_select_options("Raids"),
+   min_values=0,
+   max_values=1,
+   required=False,
+   custom_id="pb:submit:raid"
+  )
+  self.boss_select=ui.Select(
+   placeholder="Choose boss and mode",
+   options=submission_select_options("Bosses"),
+   min_values=0,
+   max_values=1,
+   required=False,
+   custom_id="pb:submit:boss"
+  )
+  self.time_input=ui.TextInput(
+   placeholder="14:32.60",
+   max_length=20,
+   custom_id="pb:submit:time"
+  )
+  self.members_input=ui.TextInput(
+   placeholder="Vecs, Mohi, Hokage",
+   max_length=240,
+   custom_id="pb:submit:members"
+  )
+  self.proof_input=ui.TextInput(
+   placeholder="https://...",
+   required=False,
+   max_length=500,
+   custom_id="pb:submit:proof"
+  )
+
+  self.add_item(
+   ui.Label(
+    text="Raid PB",
+    description="Choose this OR the Boss PB field below.",
+    component=self.raid_select
+   )
+  )
+  self.add_item(
+   ui.Label(
+    text="Boss PB",
+    description="Choose this OR the Raid PB field above.",
+    component=self.boss_select
+   )
+  )
+  self.add_item(
+   ui.Label(
+    text="Completion time",
+    description="Use MM:SS.ss or HH:MM:SS.ss.",
+    component=self.time_input
+   )
+  )
+  self.add_item(
+   ui.Label(
+    text="Member RSNs",
+    description="Comma-separated RuneScape names.",
+    component=self.members_input
+   )
+  )
+  self.add_item(
+   ui.Label(
+    text="Proof URL",
+    description="Optional. Screenshot/video can be added later with /pbproof.",
+    component=self.proof_input
+   )
+  )
+
+ async def on_submit(self,i):
+  raid=self.raid_select.values
+  boss=self.boss_select.values
+  if bool(raid)==bool(boss):
+   return await i.response.send_message(
+    "Choose exactly one PB activity: either a Raid or a Boss.",
+    ephemeral=True
+   )
+
+  category="Raids" if raid else "Bosses"
+  choice=(raid or boss)[0]
+  activity,variant=choice.split("|||",1)
+
+  await submit(
+   i,
+   category,
+   activity,
+   variant,
+   self.time_input.value,
+   self.members_input.value,
+   self.proof_input.value.strip()
+  )
 
 @bot.tree.command(name="pbsubmission",description="Submit a new PB for staff review")
 @app_commands.guild_only()
 async def pbsubmission(i:discord.Interaction):
- await i.response.send_message("✦ **NOVUS | PB Submission**\nSelect Raids or Bosses:",view=ChooseCategory(),ephemeral=True)
+ await i.response.send_modal(SubmitModal())
 
 @bot.tree.command(name="pbproof",description="Attach proof to your pending submission")
 @app_commands.guild_only()
