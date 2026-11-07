@@ -183,12 +183,6 @@ class Home(ui.LayoutView):
   )
 
   panel.add_item(ui.Separator())
-  panel.add_item(
-   ui.TextDisplay(
-    "**EXPLORE RECORDS**\n"
-    "-# Select a category to view the full leaderboards."
-   )
-  )
 
   row=ui.ActionRow()
   for cat in CATS:
@@ -207,21 +201,17 @@ class Home(ui.LayoutView):
   panel.add_item(row)
 
   panel.add_item(ui.Separator())
-
   panel.add_item(
    ui.TextDisplay(
-    "### ✦ RAID RECORDS\n"
-    "-# TOP 3 APPROVED TIMES"
+    "### RAID RECORDS\n"
+    "-# FASTEST VERIFIED RUNS"
    )
   )
 
   raid_leaders=raid_leaders or {}
   for idx,activity in enumerate(RAIDS):
-   if idx:
-    panel.add_item(ui.Separator())
-
    results=raid_leaders.get(activity,[])
-   lines=[f"**{clean(activity)}**"]
+   lines=[f"### {clean(activity)}"]
    if results:
     for k,r in enumerate(results):
      lines.append(
@@ -230,7 +220,27 @@ class Home(ui.LayoutView):
      )
    else:
     lines.append("-# No approved records yet.")
-   panel.add_item(ui.TextDisplay("\n".join(lines)))
+
+   view_btn=ui.Button(
+    label="View",
+    style=discord.ButtonStyle.secondary,
+    custom_id=f"pb:home:raid:{idx}"
+   )
+   async def view_raid(i,raid_index=idx):
+    await i.response.send_message(
+     view=await Browser.make(i.guild_id,"Raids",raid_index),
+     ephemeral=True
+    )
+   view_btn.callback=view_raid
+
+   panel.add_item(
+    ui.Section(
+     ui.TextDisplay("\n".join(lines)),
+     accessory=view_btn
+    )
+   )
+   if idx < len(RAIDS)-1:
+    panel.add_item(ui.Separator())
 
   self.add_item(panel)
 
@@ -253,20 +263,24 @@ class Browser(ui.LayoutView):
   name=list(activities)[index]
 
   panel=ui.Container(accent_colour=BLUE)
+
+  page_badge=ui.Button(
+   label=f"{index+1} / {len(activities)}",
+   style=discord.ButtonStyle.secondary,
+   disabled=True
+  )
   panel.add_item(
-   ui.TextDisplay(
-    f"## ✦ NOVUS | {cat.upper()}\n"
-    f"### {clean(name)}\n"
-    f"-# {index+1} OF {len(activities)} · VERIFIED TOP 5"
+   ui.Section(
+    ui.TextDisplay(
+     f"## ✦ NOVUS | {cat.upper()}\n"
+     f"### {clean(name)}\n"
+     f"-# VERIFIED TOP 5 RECORDS"
+    ),
+    accessory=page_badge
    )
   )
 
   panel.add_item(ui.Separator())
-  panel.add_item(
-   ui.TextDisplay(
-    "-# Browse verified records by mode and team size."
-   )
-  )
 
   nav=ui.ActionRow()
   for label,offset in (("Previous",-1),("Next",1)):
@@ -297,7 +311,7 @@ class Browser(ui.LayoutView):
 
   for pos,(variant,results) in enumerate(blocks):
    panel.add_item(ui.Separator())
-   lines=[f"### ✦ {clean(variant)}"]
+   lines=[f"### {clean(variant)}"]
    for k in range(5):
     if k>=len(results):
      lines.append(f"**{MEDALS[k]}** —")
@@ -311,7 +325,7 @@ class Browser(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(
    ui.TextDisplay(
-    "-# Use Previous / Next to browse activities"
+    "-# Previous / Next to browse activities"
    )
   )
 
@@ -365,7 +379,7 @@ class Review(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(
    ui.TextDisplay(
-    f"-# ✦ SUBMITTED TIME\n"
+    f"-# SUBMITTED TIME\n"
     f"## {fmt(r['ms'])}\n"
     f"**{review_members(r)}**"
    )
@@ -376,7 +390,7 @@ class Review(ui.LayoutView):
   if p and valid_url(p):
    panel.add_item(
     ui.TextDisplay(
-     "### ✦ PROOF\n"
+     "### Proof\n"
      f"[Open submitted evidence]({p})"
     )
    )
