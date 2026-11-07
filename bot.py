@@ -16,6 +16,7 @@ STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.stri
 GOLD=0xD9A75B
 BLUE=0x346B9E
 PB_BANNER_PATH="assets/novus_pb_banner.jpg"
+PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e56d115997dde7d1696ef4c535ce366da87ba84b/assets/novus_pb_banner.jpg"
 RAIDS={
  "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
  "Chambers of Xeric":["Normal · Solo","Normal · Duo","Normal · Trio","Normal · 5-Man","Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
@@ -161,6 +162,13 @@ class Home(ui.LayoutView):
   super().__init__(timeout=None)
 
   panel=ui.Container(accent_colour=GOLD)
+
+  banner=ui.MediaGallery()
+  banner.add_item(
+   media=PB_BANNER_URL,
+   description="Novus OSRS PvM Clan celestial banner"
+  )
+  panel.add_item(banner)
 
   panel.add_item(
    ui.TextDisplay(
@@ -639,7 +647,7 @@ async def pbpanel(i:discord.Interaction):
    ephemeral=True
   )
 
- # Remove the tracked old banner/panel so the new banner can sit directly above the board.
+ # Clean up any old split-banner version and old panel before recreating one V2 card.
  for record in (await store.banner(i.guild_id),await store.panel(i.guild_id)):
   if not record:
    continue
@@ -651,19 +659,13 @@ async def pbpanel(i:discord.Interaction):
    pass
 
  try:
-  banner_file=discord.File(
-   PB_BANNER_PATH,
-   filename="novus_pb_banner.jpg",
-   description="Novus OSRS PvM Clan celestial banner"
-  )
-  banner_msg=await i.channel.send(file=banner_file)
   panel_msg=await i.channel.send(view=await Home.make(i.guild_id))
-
-  await store.set_banner(i.guild_id,i.channel_id,banner_msg.id)
   await store.set_panel(i.guild_id,i.channel_id,panel_msg.id)
-
+  async with store.lock:
+   await store.conn.execute("DELETE FROM panel_banners WHERE guild=?",(i.guild_id,))
+   await store.conn.commit()
   await i.followup.send(
-   "Refreshed the Novus PB board with the celestial banner above it. Pin the PB panel message once the layout looks right.",
+   "Refreshed the Novus PB board as one Components V2 card.",
    ephemeral=True
   )
  except discord.Forbidden:
