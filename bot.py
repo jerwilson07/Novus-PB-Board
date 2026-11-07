@@ -26,7 +26,7 @@ BOSSES={
  "Vardorvis":["Normal","Awakened"],"Duke Sucellus":["Normal","Awakened"],
  "Leviathan":["Normal","Awakened"],"The Whisperer":["Normal","Awakened"],
  "Phantom Muspah":["Standard"],"Phosani's Nightmare":["Standard"],
- "Gauntlet":["Regular","Corrupted"],"Inferno":["Standard"],
+ "Gauntlet":["Regular","Corrupted"],"Fight Caves":["Standard"],"Inferno":["Standard"],
  "Colosseum":["Standard"],"Doom":["Standard"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
 MEDALS=["🥇","🥈","🥉","4.","5."]
