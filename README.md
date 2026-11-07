@@ -8,7 +8,7 @@ Create `#pb-leaderboard` as read-only for regular members, with history enabled;
 
 Staff runs `/pbpanel` once in `#pb-leaderboard`. Members use the panel's Raids/Bosses buttons to browse current approved top-five times privately, with left/right activity navigation and each activity's variants stacked vertically.
 
-`/pbsubmission` opens a private category and activity picker followed by a clean modal for time, players, and an optional proof URL. Staff receives a review card with **Approve**, **Deny**, and **Request Proof**. Approval requires proof; a member can attach evidence later using `/pbproof`.
+`/pbsubmit` opens a private category and activity picker followed by a clean modal for time, players, and an optional proof URL. Staff receives a review card with **Approve**, **Deny**, and **Request Proof**. Approval requires proof; a member can attach evidence later using `/pbproof`.
 
 The board uses a SQLite database. On Railway, **mount a persistent volume at /data** and use `DATABASE_PATH=/data/novus_pb.sqlite3`. Never store the bot token in GitHub.
 
