@@ -314,6 +314,13 @@ async def pbproof(i:discord.Interaction,submission_id:int,url:str="",attachment:
 async def pbpanel(i:discord.Interaction):
  if not is_staff(i):return await i.response.send_message("Staff only.",ephemeral=True)
  await i.response.defer(ephemeral=True)
+ me=i.guild.me
+ perms=i.channel.permissions_for(me) if me else None
+ if not perms or not perms.view_channel or not perms.send_messages:
+  return await i.followup.send(
+   "I need **View Channel** and **Send Messages** in this channel before I can create the PB panel.",
+   ephemeral=True
+  )
  old=await store.panel(i.guild_id)
  if old:
   try:
@@ -321,10 +328,24 @@ async def pbpanel(i:discord.Interaction):
    msg=await ch.fetch_message(old["message"])
    await msg.edit(view=Home())
    return await i.followup.send(f"Refreshed the existing panel in <#{ch.id}>.",ephemeral=True)
-  except discord.HTTPException:pass
- msg=await i.channel.send(view=Home())
- await store.set_panel(i.guild_id,i.channel_id,msg.id)
- await i.followup.send("Created the PB panel. Pin the message.",ephemeral=True)
+  except discord.HTTPException:
+   logging.exception("Unable to refresh existing PB panel; creating a new one")
+ try:
+  msg=await i.channel.send(view=Home())
+  await store.set_panel(i.guild_id,i.channel_id,msg.id)
+  await i.followup.send("Created the PB panel. Pin the message.",ephemeral=True)
+ except discord.Forbidden:
+  logging.exception("PB panel send forbidden in channel %s",i.channel_id)
+  await i.followup.send(
+   "Discord blocked the panel post. Give Novus PB **View Channel**, **Send Messages**, **Read Message History**, and **Embed Links** here, then run /pbpanel again.",
+   ephemeral=True
+  )
+ except Exception as e:
+  logging.exception("PB panel creation failed")
+  await i.followup.send(
+   f"PB panel creation failed: \`{type(e).__name__}\`. Check the Railway log for the matching traceback.",
+   ephemeral=True
+  )
 
 if __name__=="__main__":
  if not TOKEN:raise RuntimeError("DISCORD_TOKEN environment variable is required")
