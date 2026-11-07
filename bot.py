@@ -131,6 +131,10 @@ class Store:
   return await self.all("""SELECT * FROM submissions
   WHERE guild=? AND status='approved'
   ORDER BY updated DESC,id DESC LIMIT ?""",(g,limit))
+ async def raid_top3(self,g,activity):
+  return await self.all("""SELECT * FROM submissions
+  WHERE guild=? AND category='Raids' AND activity=? AND status='approved'
+  ORDER BY ms,id LIMIT 3""",(g,activity))
  async def clear_guild(self,g):
   async with self.lock:
    await self.conn.execute("DELETE FROM submissions WHERE guild=?",(g,))
@@ -158,7 +162,7 @@ def is_staff(i):
  return m.guild_permissions.manage_guild or m.guild_permissions.administrator or bool(STAFF_ROLES.intersection(x.id for x in m.roles))
 
 class Home(ui.LayoutView):
- def __init__(self,recent=None):
+ def __init__(self,raid_leaders=None):
   super().__init__(timeout=None)
 
   panel=ui.Container(accent_colour=GOLD)
@@ -182,7 +186,7 @@ class Home(ui.LayoutView):
   panel.add_item(
    ui.TextDisplay(
     "**EXPLORE RECORDS**\n"
-    "-# Select a category to view the fastest verified Novus records."
+    "-# Select a category to view the full leaderboards."
    )
   )
 
@@ -204,24 +208,38 @@ class Home(ui.LayoutView):
 
   panel.add_item(ui.Separator())
 
-  lines=["### ✦ RECENTLY APPROVED", "-# LATEST VERIFIED RECORDS"]
-  if recent:
-   for r in recent:
-    lines.append(
-     f"✦ **{fmt(r['ms'])}**  ·  **{clean(r['activity'])}**\n"
-     f"-# {clean(r['variant'])} · {clean(r['members'])}"
-    )
-  else:
-   lines.append(
-    "-# No approved PBs yet. Newly approved records will appear here."
+  panel.add_item(
+   ui.TextDisplay(
+    "### ✦ RAID RECORDS\n"
+    "-# TOP 3 APPROVED TIMES"
    )
-  panel.add_item(ui.TextDisplay("\n\n".join(lines)))
+  )
+
+  raid_leaders=raid_leaders or {}
+  for idx,activity in enumerate(RAIDS):
+   if idx:
+    panel.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
+
+   results=raid_leaders.get(activity,[])
+   lines=[f"**{clean(activity)}**"]
+   if results:
+    for k,r in enumerate(results):
+     lines.append(
+      f"{MEDALS[k]} **{fmt(r['ms'])}** · {clean(r['variant'])}\n"
+      f"-# {clean(r['members'])}"
+     )
+   else:
+    lines.append("-# No approved records yet.")
+   panel.add_item(ui.TextDisplay("\n".join(lines)))
 
   self.add_item(panel)
 
  @classmethod
  async def make(cls,g):
-  return cls(await store.recent_approved(g,3))
+  return cls({
+   activity:await store.raid_top3(g,activity)
+   for activity in RAIDS
+  })
 
 
 class Browser(ui.LayoutView):
