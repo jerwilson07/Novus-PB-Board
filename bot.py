@@ -82,7 +82,8 @@ class Store:
   members TEXT NOT NULL,member_ids TEXT,ms INTEGER NOT NULL,proof TEXT,status TEXT NOT NULL DEFAULT 'pending',
   reviewer INTEGER,review_channel INTEGER,review_message INTEGER,created TEXT,updated TEXT);
   CREATE INDEX IF NOT EXISTS pb_rank ON submissions(guild,category,activity,variant,status,ms);
-  CREATE TABLE IF NOT EXISTS panels(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
+  CREATE TABLE IF NOT EXISTS panels(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
+  CREATE TABLE IF NOT EXISTS panel_banners(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
   async with self.conn.execute("PRAGMA table_info(submissions)") as c:
    columns={row[1] async for row in c}
   if "member_ids" not in columns:
@@ -114,6 +115,12 @@ class Store:
  async def set_panel(self,g,ch,msg):
   async with self.lock:
    await self.conn.execute("""INSERT INTO panels VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE
+   SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
+   await self.conn.commit()
+ async def banner(self,g):return await self.one("SELECT * FROM panel_banners WHERE guild=?",(g,))
+ async def set_banner(self,g,ch,msg):
+  async with self.lock:
+   await self.conn.execute("""INSERT INTO panel_banners VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE
    SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
    await self.conn.commit()
  async def ranking(self,g,cat,a,v):
@@ -150,18 +157,10 @@ def is_staff(i):
  return m.guild_permissions.manage_guild or m.guild_permissions.administrator or bool(STAFF_ROLES.intersection(x.id for x in m.roles))
 
 class Home(ui.LayoutView):
- def __init__(self,recent=None,banner_url=None):
+ def __init__(self,recent=None):
   super().__init__(timeout=None)
 
   panel=ui.Container(accent_colour=GOLD)
-
-  if banner_url:
-   banner=ui.MediaGallery()
-   banner.add_item(
-    media=banner_url,
-    description="Novus OSRS PvM Clan celestial banner"
-   )
-   panel.add_item(banner)
 
   panel.add_item(
    ui.TextDisplay(
@@ -207,8 +206,8 @@ class Home(ui.LayoutView):
   self.add_item(panel)
 
  @classmethod
- async def make(cls,g,banner_url=None):
-  return cls(await store.recent_approved(g,5),banner_url)
+ async def make(cls,g):
+  return cls(await store.recent_approved(g,5))
 
 
 class Browser(ui.LayoutView):
@@ -397,8 +396,7 @@ async def refresh_panel(g):
  try:
   ch=bot.get_channel(r["channel"]) or await bot.fetch_channel(r["channel"])
   msg=await ch.fetch_message(r["message"])
-  banner_url=msg.attachments[0].url if msg.attachments else None
-  await msg.edit(view=await Home.make(g,banner_url))
+  await msg.edit(view=await Home.make(g))
  except discord.HTTPException:logging.exception("Unable to refresh public panel")
 
 async def update_review(r):
@@ -640,35 +638,44 @@ async def pbpanel(i:discord.Interaction):
    "I need **View Channel** and **Send Messages** in this channel before I can create the PB panel.",
    ephemeral=True
   )
- old=await store.panel(i.guild_id)
- if old:
+
+ # Remove the tracked old banner/panel so the new banner can sit directly above the board.
+ for record in (await store.banner(i.guild_id),await store.panel(i.guild_id)):
+  if not record:
+   continue
   try:
-   ch=bot.get_channel(old["channel"]) or await bot.fetch_channel(old["channel"])
-   msg=await ch.fetch_message(old["message"])
-   banner_file=discord.File(PB_BANNER_PATH,filename="novus_pb_banner.jpg")
-   msg=await msg.edit(attachments=[banner_file])
-   banner_url=msg.attachments[0].url if msg.attachments else None
-   await msg.edit(view=await Home.make(i.guild_id,banner_url))
-   return await i.followup.send(f"Refreshed the existing panel in <#{ch.id}>.",ephemeral=True)
+   ch=bot.get_channel(record["channel"]) or await bot.fetch_channel(record["channel"])
+   msg=await ch.fetch_message(record["message"])
+   await msg.delete()
   except discord.HTTPException:
-   logging.exception("Unable to refresh existing PB panel; creating a new one")
+   pass
+
  try:
-  banner_file=discord.File(PB_BANNER_PATH,filename="novus_pb_banner.jpg")
-  msg=await i.channel.send(file=banner_file)
-  banner_url=msg.attachments[0].url if msg.attachments else None
-  await msg.edit(view=await Home.make(i.guild_id,banner_url))
-  await store.set_panel(i.guild_id,i.channel_id,msg.id)
-  await i.followup.send("Created the PB panel. Pin the message.",ephemeral=True)
+  banner_file=discord.File(
+   PB_BANNER_PATH,
+   filename="novus_pb_banner.jpg",
+   description="Novus OSRS PvM Clan celestial banner"
+  )
+  banner_msg=await i.channel.send(file=banner_file)
+  panel_msg=await i.channel.send(view=await Home.make(i.guild_id))
+
+  await store.set_banner(i.guild_id,i.channel_id,banner_msg.id)
+  await store.set_panel(i.guild_id,i.channel_id,panel_msg.id)
+
+  await i.followup.send(
+   "Refreshed the Novus PB board with the celestial banner above it. Pin the PB panel message once the layout looks right.",
+   ephemeral=True
+  )
  except discord.Forbidden:
   logging.exception("PB panel send forbidden in channel %s",i.channel_id)
   await i.followup.send(
-   "Discord blocked the panel post. Give Novus PB **View Channel**, **Send Messages**, **Read Message History**, and **Embed Links** here, then run /pbpanel again.",
+   "Discord blocked the PB board post. Give Novus PB **View Channel**, **Send Messages**, and **Read Message History** here, then run /pbpanel again.",
    ephemeral=True
   )
  except Exception as e:
   logging.exception("PB panel creation failed")
   await i.followup.send(
-   f"PB panel creation failed: \`{type(e).__name__}\`. Check the Railway log for the matching traceback.",
+   f"PB panel creation failed: `{type(e).__name__}`. Check the Railway log for the matching traceback.",
    ephemeral=True
   )
 
