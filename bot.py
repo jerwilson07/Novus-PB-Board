@@ -27,7 +27,7 @@ BOSSES={
  "Gauntlet":["Regular","Corrupted"],"Inferno":["Standard"],
  "Colosseum":["Standard"],"Doom":["Standard"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
-MEDALS=["1.","2.","3.","4.","5."]
+MEDALS=["🥇","🥈","🥉","4.","5."]
 def now(): return datetime.now(timezone.utc).isoformat(timespec="seconds")
 def clean(v): return discord.utils.escape_mentions(discord.utils.escape_markdown(str(v)))
 def valid_url(v):
