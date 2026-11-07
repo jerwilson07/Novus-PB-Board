@@ -18,10 +18,10 @@ BLUE=0x57B7FF
 PB_BANNER_PATH="assets/novus_pb_banner.jpg"
 PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e56d115997dde7d1696ef4c535ce366da87ba84b/assets/novus_pb_banner.jpg"
 RAIDS={
+ "The Fractured Archive":["Solo","Duo","Trio","4-Man"],
  "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
  "Chambers of Xeric":["Normal · Solo","Normal · Duo","Normal · Trio","Normal · 5-Man","Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
- "Tombs of Amascut":["Expert · Solo","Expert · 8-Man"],
- "The Fractured Archive":["Solo","Duo","Trio","4-Man"]}
+ "Tombs of Amascut":["Expert · Solo","Expert · 8-Man"]}
 BOSSES={
  "Vardorvis":["Normal","Awakened"],"Duke Sucellus":["Normal","Awakened"],
  "Leviathan":["Normal","Awakened"],"The Whisperer":["Normal","Awakened"],
