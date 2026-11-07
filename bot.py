@@ -528,23 +528,20 @@ class Browser(ui.LayoutView):
   self.g=g
   self.cat=cat
   self.index=index
-
   activities=CATS[cat]
   name=list(activities)[index]
 
   panel=ui.Container(accent_colour=GOLD)
+  panel.add_item(ui.TextDisplay(
+   f"## NOVUS · {clean(name)}\n"
+   f"-# VERIFIED {cat.upper()} RECORDS · {index+1}/{len(activities)}"
+  ))
 
   tabs=ui.ActionRow()
-  raids=ui.Button(
-   label="Raids",
-   style=discord.ButtonStyle.primary if cat=="Raids" else discord.ButtonStyle.secondary
-  )
-  bosses=ui.Button(
-   label="Bosses",
-   style=discord.ButtonStyle.primary if cat=="Bosses" else discord.ButtonStyle.secondary
-  )
+  raids=ui.Button(label="Raids",style=discord.ButtonStyle.secondary)
+  bosses=ui.Button(label="Bosses",style=discord.ButtonStyle.primary)
   async def show_raids(i):
-   await i.response.edit_message(view=await Browser.make(self.g,"Raids",0))
+   await i.response.edit_message(view=await RaidBrowser.make(self.g,0,0))
   async def show_bosses(i):
    await i.response.edit_message(view=await Browser.make(self.g,"Bosses",0))
   raids.callback=show_raids
@@ -552,25 +549,17 @@ class Browser(ui.LayoutView):
   tabs.add_item(raids)
   tabs.add_item(bosses)
   panel.add_item(tabs)
-
   panel.add_item(ui.Separator())
 
   nav=ui.ActionRow()
-
-  prev=ui.Button(
-   label="‹",
-   style=discord.ButtonStyle.secondary
-  )
+  prev=ui.Button(label="‹ Previous",style=discord.ButtonStyle.secondary)
   current=ui.Button(
-   label=f"{clean(name)}  ·  {index+1}/{len(activities)}",
+   label=f"{index+1}/{len(activities)}",
    style=discord.ButtonStyle.secondary,
    disabled=True
   )
-  nxt=ui.Button(
-   label="›",
-   style=discord.ButtonStyle.secondary
-  )
-
+  nxt=ui.Button(label="Next ›",style=discord.ButtonStyle.secondary)
+  overview=ui.Button(label="Overview",style=discord.ButtonStyle.secondary)
   async def move_prev(i):
    await i.response.edit_message(
     view=await Browser.make(
@@ -583,61 +572,59 @@ class Browser(ui.LayoutView):
      self.g,self.cat,(self.index+1)%len(CATS[self.cat])
     )
    )
-
+  async def show_overview(i):
+   await i.response.edit_message(view=await Home.make(self.g))
   prev.callback=move_prev
   nxt.callback=move_next
+  overview.callback=show_overview
   nav.add_item(prev)
   nav.add_item(current)
   nav.add_item(nxt)
+  nav.add_item(overview)
   panel.add_item(nav)
 
-  panel.add_item(
-   ui.TextDisplay(
-    f"-# {cat.upper()} · ALL VARIANTS · VERIFIED TOP 5"
-   )
-  )
-
   rankings=ui.Container(accent_colour=BLUE)
-
   for pos,(variant,results) in enumerate(blocks):
    if pos:
     rankings.add_item(ui.Separator())
-
-   lines=[]
-   for k in range(5):
-    if k>=len(results):
-     lines.append(f"{MEDALS[k]} —")
-    else:
-     r=results[k]
-     lines.append(
-      f"{MEDALS[k]} **{fmt(r['ms'])}** · {clean(r['members'])}"
-     )
-
-   top_badge=ui.Button(
-    label="TOP 5",
-    style=discord.ButtonStyle.secondary,
-    disabled=True
-   )
-   rankings.add_item(
-    ui.Section(
-     ui.TextDisplay(
-      f"### {clean(variant)}\n" + "\n".join(lines)
-     ),
-     accessory=top_badge
+   lines=[f"### {clean(variant)} · TOP 5"]
+   if not results:
+    lines.append("-# No approved records yet · Submit with /pbsubmit")
+   else:
+    for rank,r in enumerate(results):
+     line=short_record(r,rank)
+     if rank==0:line="**NOVUS #1** · "+line
+     lines.append(line)
+   rankings.add_item(ui.Section(
+    ui.TextDisplay("\n".join(lines)),
+    accessory=ui.Button(
+     label="TOP 5",style=discord.ButtonStyle.secondary,disabled=True
     )
-   )
+   ))
+
+  shortcuts=ui.ActionRow()
+  submit=ui.Button(label="Submit PB",style=discord.ButtonStyle.success)
+  rules=ui.Button(label="PB Rules",style=discord.ButtonStyle.secondary)
+  async def open_submit(i):
+   await i.response.send_modal(SubmitModal())
+  async def open_rules(i):
+   await i.response.send_message(view=RulesCard(),ephemeral=True)
+  submit.callback=open_submit
+  rules.callback=open_rules
+  shortcuts.add_item(submit)
+  shortcuts.add_item(rules)
+  rankings.add_item(shortcuts)
 
   self.add_item(panel)
   self.add_item(rankings)
 
  @classmethod
  async def make(cls,g,cat,index):
-  activity=list(CATS[cat])[index]
+  names=list(CATS[cat])
+  index%=len(names)
+  activity=names[index]
   return cls(
-   g,
-   cat,
-   index,
-   [
+   g,cat,index,[
     (variant,await store.ranking(g,cat,activity,variant))
     for variant in CATS[cat][activity]
    ]
@@ -756,11 +743,6 @@ class Review(ui.LayoutView):
    async def deny_clicked(i):await decide(i,self.sid,"deny")
    approve.callback=approve_clicked
    deny.callback=deny_clicked
-   decision_row.add_item(approve)
-   decision_row.add_item(deny)
-   panel.add_item(decision_row)
-
-   proof_row=ui.ActionRow()
    request=ui.Button(
     label="Request Proof",
     style=discord.ButtonStyle.primary,
@@ -768,8 +750,10 @@ class Review(ui.LayoutView):
    )
    async def request_clicked(i):await decide(i,self.sid,"request")
    request.callback=request_clicked
-   proof_row.add_item(request)
-   panel.add_item(proof_row)
+   decision_row.add_item(approve)
+   decision_row.add_item(deny)
+   decision_row.add_item(request)
+   panel.add_item(decision_row)
 
   self.add_item(panel)
 
