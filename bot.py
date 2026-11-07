@@ -13,8 +13,8 @@ GUILD_ID=int(os.getenv("GUILD_ID","0"))
 REVIEW_ID=int(os.getenv("REVIEW_CHANNEL_ID","0"))
 DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
 STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.strip().isdigit()}
-GOLD=0xC8975D
-BLUE=0x2F8CE0
+GOLD=0xEAC17B
+BLUE=0x57B7FF
 PB_BANNER_PATH="assets/novus_pb_banner.jpg"
 PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e56d115997dde7d1696ef4c535ce366da87ba84b/assets/novus_pb_banner.jpg"
 RAIDS={
@@ -165,16 +165,16 @@ class Home(ui.LayoutView):
  def __init__(self,raid_leaders=None):
   super().__init__(timeout=None)
 
-  panel=ui.Container(accent_colour=GOLD)
+  hero=ui.Container(accent_colour=GOLD)
 
   banner=ui.MediaGallery()
   banner.add_item(
    media=PB_BANNER_URL,
    description="Novus OSRS PvM Clan celestial banner"
   )
-  panel.add_item(banner)
+  hero.add_item(banner)
 
-  panel.add_item(
+  hero.add_item(
    ui.TextDisplay(
     "## ✦ NOVUS\n"
     "### PERSONAL BEST LEADERBOARDS\n"
@@ -182,9 +182,9 @@ class Home(ui.LayoutView):
    )
   )
 
-  panel.add_item(ui.Separator())
+  hero.add_item(ui.Separator())
 
-  row=ui.ActionRow()
+  tabs=ui.ActionRow()
   for cat in CATS:
    b=ui.Button(
     label=cat,
@@ -197,20 +197,16 @@ class Home(ui.LayoutView):
      ephemeral=True
     )
    b.callback=clicked
-   row.add_item(b)
-  panel.add_item(row)
+   tabs.add_item(b)
+  hero.add_item(tabs)
 
-  panel.add_item(ui.Separator())
-  panel.add_item(
-   ui.TextDisplay(
-    "### RAID RECORDS"
-   )
-  )
-
+  records=ui.Container(accent_colour=BLUE)
   raid_leaders=raid_leaders or {}
-  for idx,activity in enumerate(RAIDS):
+  lines=["### RAID RECORDS"]
+
+  for activity in RAIDS:
    results=raid_leaders.get(activity,[])
-   lines=[f"### {clean(activity)}"]
+   lines.append(f"\n**{clean(activity)}**")
    if results:
     for k,r in enumerate(results):
      lines.append(
@@ -220,28 +216,10 @@ class Home(ui.LayoutView):
    else:
     lines.append("-# No approved records yet.")
 
-   view_btn=ui.Button(
-    label="View",
-    style=discord.ButtonStyle.secondary,
-    custom_id=f"pb:home:raid:{idx}"
-   )
-   async def view_raid(i,raid_index=idx):
-    await i.response.send_message(
-     view=await Browser.make(i.guild_id,"Raids",raid_index),
-     ephemeral=True
-    )
-   view_btn.callback=view_raid
+  records.add_item(ui.TextDisplay("\n".join(lines)))
 
-   panel.add_item(
-    ui.Section(
-     ui.TextDisplay("\n".join(lines)),
-     accessory=view_btn
-    )
-   )
-   if idx < len(RAIDS)-1:
-    panel.add_item(ui.Separator())
-
-  self.add_item(panel)
+  self.add_item(hero)
+  self.add_item(records)
 
  @classmethod
  async def make(cls,g):
@@ -261,25 +239,16 @@ class Browser(ui.LayoutView):
   activities=CATS[cat]
   name=list(activities)[index]
 
-  panel=ui.Container(accent_colour=BLUE)
-
-  page_badge=ui.Button(
-   label=f"{index+1} / {len(activities)}",
-   style=discord.ButtonStyle.secondary,
-   disabled=True
-  )
-  panel.add_item(
-   ui.Section(
-    ui.TextDisplay(
-     f"## ✦ NOVUS | {cat.upper()}\n"
-     f"### {clean(name)}\n"
-     f"-# VERIFIED TOP 5 RECORDS"
-    ),
-    accessory=page_badge
+  mast=ui.Container(accent_colour=GOLD)
+  mast.add_item(
+   ui.TextDisplay(
+    f"## ✦ NOVUS | {cat.upper()}\n"
+    f"### {clean(name)}\n"
+    f"-# {index+1} OF {len(activities)} · VERIFIED TOP 5"
    )
   )
 
-  panel.add_item(ui.Separator())
+  mast.add_item(ui.Separator())
 
   nav=ui.ActionRow()
   for label,offset in (("Previous",-1),("Next",1)):
@@ -298,7 +267,7 @@ class Browser(ui.LayoutView):
   other="Bosses" if cat=="Raids" else "Raids"
   swap=ui.Button(
    label=other,
-   style=discord.ButtonStyle.primary
+   style=discord.ButtonStyle.secondary
   )
   async def swap_category(i):
    await i.response.edit_message(
@@ -306,10 +275,14 @@ class Browser(ui.LayoutView):
    )
   swap.callback=swap_category
   nav.add_item(swap)
-  panel.add_item(nav)
+  mast.add_item(nav)
+
+  rankings=ui.Container(accent_colour=BLUE)
 
   for pos,(variant,results) in enumerate(blocks):
-   panel.add_item(ui.Separator())
+   if pos:
+    rankings.add_item(ui.Separator())
+
    lines=[f"### {clean(variant)}"]
    for k in range(5):
     if k>=len(results):
@@ -319,9 +292,10 @@ class Browser(ui.LayoutView):
      lines.append(
       f"**{MEDALS[k]}** **{fmt(r['ms'])}** · {clean(r['members'])}"
      )
-   panel.add_item(ui.TextDisplay("\n".join(lines)))
+   rankings.add_item(ui.TextDisplay("\n".join(lines)))
 
-  self.add_item(panel)
+  self.add_item(mast)
+  self.add_item(rankings)
 
  @classmethod
  async def make(cls,g,cat,index):
