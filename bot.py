@@ -47,7 +47,15 @@ def parse_ms(s):
  return total
 def fmt(ms):
  s,m=divmod(ms,1000); minute,sec=divmod(s,60); hour,minute=divmod(minute,60)
- return f"{hour}:{minute:02}:{sec:02}.{m:03}" if hour else f"{minute}:{sec:02}.{m:03}"
+ cs=m//10
+ return f"{hour}:{minute:02}:{sec:02}.{cs:02}" if hour else f"{minute}:{sec:02}.{cs:02}"
+
+def proof_looks_like_media(url):
+ try:
+  path=urlparse(url).path.lower()
+  return path.endswith((".png",".jpg",".jpeg",".gif",".webp",".mp4",".mov",".webm"))
+ except ValueError:
+  return False
 def team_size(cat,variant):
  if cat=="Bosses" or "Solo" in variant:return 1
  if "Duo" in variant:return 2
@@ -191,23 +199,97 @@ class Review(ui.LayoutView):
   active=r["status"] in ("pending","awaiting_proof")
   super().__init__(timeout=None if active else 60)
   self.sid=r["id"]
-  panel=ui.Container(accent_colour=GOLD if active else BLUE)
-  p=r["proof"];proof=f"[Open proof]({p})" if p and valid_url(p) else "Not provided"
-  panel.add_item(ui.TextDisplay(
-   f"## ✦ NOVUS | PB REVIEW #{r['id']}\n**{clean(r['activity'])}** · {clean(r['variant'])}\n"
-   f"### {fmt(r['ms'])}\n**Team:** {clean(r['members'])}\n"
-   f"**Submitted by:** <@{r['submitter']}>\n**Proof:** {proof}\n"
-   f"**Status:** {r['status'].replace('_',' ').title()}"))
+  status=r["status"].replace("_"," ").title()
+
+  status_style={
+   "pending":discord.ButtonStyle.secondary,
+   "awaiting_proof":discord.ButtonStyle.primary,
+   "approved":discord.ButtonStyle.success,
+   "denied":discord.ButtonStyle.danger,
+  }.get(r["status"],discord.ButtonStyle.secondary)
+
+  status_badge=ui.Button(
+   label=status,
+   style=status_style,
+   disabled=True,
+   custom_id=f"pb:status:{self.sid}"
+  )
+  header=ui.Container(accent_colour=GOLD)
+  header.add_item(
+   ui.Section(
+    ui.TextDisplay(
+     f"## ✦ NOVUS | PB Review\n"
+     f"**{clean(r['activity'])}** · {clean(r['variant'])}\n"
+     f"-# Submission #{r['id']} · Submitted by <@{r['submitter']}>"
+    ),
+    accessory=status_badge
+   )
+  )
+  self.add_item(header)
+
+  time_panel=ui.Container(accent_colour=BLUE)
+  time_panel.add_item(
+   ui.TextDisplay(
+    f"-# SUBMITTED TIME\n"
+    f"## {fmt(r['ms'])}\n"
+    f"**{clean(r['members'])}**"
+   )
+  )
+  self.add_item(time_panel)
+
+  proof_panel=ui.Container(accent_colour=GOLD)
+  p=r["proof"]
+  if p and valid_url(p):
+   proof_panel.add_item(
+    ui.TextDisplay(
+     "### Proof\n"
+     f"[Open submitted evidence]({p})"
+    )
+   )
+   if proof_looks_like_media(p):
+    gallery=ui.MediaGallery()
+    gallery.add_item(media=p,description="Submitted PB proof")
+    proof_panel.add_item(gallery)
+  else:
+   proof_panel.add_item(
+    ui.TextDisplay(
+     "### Proof\n"
+     "**Awaiting evidence**\n"
+     "-# Screenshot, clip, or URL will appear here."
+    )
+   )
+  self.add_item(proof_panel)
+
   if active:
-   row=ui.ActionRow()
-   for action,label,style in [("approve","Approve",discord.ButtonStyle.success),
-                              ("deny","Deny",discord.ButtonStyle.danger),
-                              ("request","Request Proof",discord.ButtonStyle.secondary)]:
-    b=ui.Button(label=label,style=style,custom_id=f"pb:review:{action}:{self.sid}")
-    async def clicked(i,choice=action):await decide(i,self.sid,choice)
-    b.callback=clicked;row.add_item(b)
-   panel.add_item(row)
-  self.add_item(panel)
+   decision_row=ui.ActionRow()
+   approve=ui.Button(
+    label="Approve",
+    style=discord.ButtonStyle.success,
+    custom_id=f"pb:review:approve:{self.sid}"
+   )
+   deny=ui.Button(
+    label="Deny",
+    style=discord.ButtonStyle.danger,
+    custom_id=f"pb:review:deny:{self.sid}"
+   )
+   async def approve_clicked(i):await decide(i,self.sid,"approve")
+   async def deny_clicked(i):await decide(i,self.sid,"deny")
+   approve.callback=approve_clicked
+   deny.callback=deny_clicked
+   decision_row.add_item(approve)
+   decision_row.add_item(deny)
+   self.add_item(decision_row)
+
+   proof_row=ui.ActionRow()
+   request=ui.Button(
+    label="Request Proof",
+    style=discord.ButtonStyle.primary,
+    custom_id=f"pb:review:request:{self.sid}"
+   )
+   async def request_clicked(i):await decide(i,self.sid,"request")
+   request.callback=request_clicked
+   proof_row.add_item(request)
+   self.add_item(proof_row)
 
 async def refresh_panel(g):
  r=await store.panel(g)
