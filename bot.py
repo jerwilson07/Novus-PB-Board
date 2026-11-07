@@ -36,6 +36,40 @@ BOSSES={
  "Colosseum":["Standard"],"Doom":["Standard"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
 MEDALS=["🥇","🥈","🥉","4.","5."]
+
+# A Novus custom emoji can be configured as <:name:id> in the Railway environment.
+# Unicode fallbacks make the interface usable before custom emojis are uploaded.
+RAID_EMOJI_DEFAULTS={
+ "The Fractured Archive":"✨",
+ "Theatre of Blood":"🩸",
+ "Chambers of Xeric":"🏛️",
+ "Tombs of Amascut":"🏺",
+}
+def raid_emoji(activity):
+ short=RAID_LABELS[activity]
+ value=os.getenv(f"PB_EMOJI_{short.upper()}",RAID_EMOJI_DEFAULTS[activity]).strip()
+ return discord.PartialEmoji.from_str(value or RAID_EMOJI_DEFAULTS[activity])
+
+def short_record(r,rank,include_variant=False):
+ medal=MEDALS[rank]
+ header=f"{medal} **{fmt(r['ms'])}**"
+ if include_variant:
+  header+=f" · {clean(r['variant'])}"
+ header+=f" · {clean(r['members'])}"
+ if r["proof"] and valid_url(r["proof"]):
+  header+=f" · [↗ Proof]({r['proof']})"
+ return header
+
+def discord_updated(timestamp):
+ if not timestamp:return None
+ try:
+  parsed=datetime.fromisoformat(timestamp.replace("Z","+00:00"))
+  if parsed.tzinfo is None:
+   parsed=parsed.replace(tzinfo=timezone.utc)
+  return f"<t:{int(parsed.timestamp())}:R>"
+ except (TypeError,ValueError,OverflowError):
+  return None
+
 def now(): return datetime.now(timezone.utc).isoformat(timespec="seconds")
 def clean(v): return discord.utils.escape_mentions(discord.utils.escape_markdown(str(v)))
 def valid_url(v):
@@ -169,121 +203,157 @@ def is_staff(i):
  m=i.user
  return m.guild_permissions.manage_guild or m.guild_permissions.administrator or bool(STAFF_ROLES.intersection(x.id for x in m.roles))
 
+class RulesCard(ui.LayoutView):
+ def __init__(self):
+  super().__init__(timeout=180)
+  panel=ui.Container(accent_colour=GOLD)
+  panel.add_item(ui.TextDisplay(
+   "## ✦ NOVUS · PB RULES\n"
+   "-# PLEASE REVIEW BEFORE SUBMITTING"
+  ))
+  panel.add_item(ui.Separator())
+  panel.add_item(ui.TextDisplay(
+   "**1. Novus-only records.** Your PB must have been achieved while you were "
+   "a member of Novus. Older PBs are not eligible.\n\n"
+   "**2. Group PBs.** Every player involved must have been a Novus member "
+   "on the date of the run. List every participant accurately.\n\n"
+   "**3. Record details.** Include the PB date, completion time, activity, "
+   "mode/team size, and all involved players.\n\n"
+   "**4. Proof.** Provide a dated screenshot, clip, or evidence URL showing "
+   "the run and participants. Use **/pbproof** after submission to attach it. "
+   "Staff must verify eligibility and proof before approval."
+  ))
+  self.add_item(panel)
+
+
 class Home(ui.LayoutView):
- def __init__(self,raid_leaders=None):
+ def __init__(self,raid_leaders=None,recent=None):
   super().__init__(timeout=None)
+  raid_leaders=raid_leaders or {}
+  recent=recent or []
 
   hero=ui.Container(accent_colour=GOLD)
-
   banner=ui.MediaGallery()
   banner.add_item(
    media=PB_BANNER_URL,
    description="Novus OSRS PvM Clan celestial banner"
   )
   hero.add_item(banner)
-
-  hero.add_item(
-   ui.TextDisplay(
-    "## NOVUS PERSONAL BEST LEADERBOARD\n"
-    "-# VERIFIED CLAN RECORDS · SELECT A RAID TO BROWSE"
-   )
-  )
-
+  hero.add_item(ui.TextDisplay(
+   "## NOVUS · PERSONAL BESTS\n"
+   "-# VERIFIED CLAN LEADERBOARDS · SELECT A RAID"
+  ))
   hero.add_item(ui.Separator())
 
   raid_row=ui.ActionRow()
   for raid_index,activity in enumerate(RAIDS):
-   short=RAID_LABELS[activity]
    raid_button=ui.Button(
-    label=short,
+    label=RAID_LABELS[activity],
+    emoji=raid_emoji(activity),
     style=discord.ButtonStyle.primary,
     custom_id=f"pb:home:raid:{raid_index}"
    )
-
    async def open_raid(i,idx=raid_index):
     await i.response.send_message(
      view=await RaidBrowser.make(i.guild_id,idx,0),
      ephemeral=True
     )
-
    raid_button.callback=open_raid
    raid_row.add_item(raid_button)
+  hero.add_item(raid_row)
 
+  actions=ui.ActionRow()
   bosses=ui.Button(
    label="Bosses",
    style=discord.ButtonStyle.secondary,
    custom_id="pb:home:bosses"
   )
-
+  submit=ui.Button(
+   label="Submit PB",
+   emoji="➕",
+   style=discord.ButtonStyle.success,
+   custom_id="pb:home:submit"
+  )
+  rules=ui.Button(
+   label="PB Rules",
+   style=discord.ButtonStyle.secondary,
+   custom_id="pb:home:rules"
+  )
   async def open_bosses(i):
    await i.response.send_message(
     view=await Browser.make(i.guild_id,"Bosses",0),
     ephemeral=True
    )
+  async def open_submit(i):
+   await i.response.send_modal(SubmitModal())
+  async def open_rules(i):
+   await i.response.send_message(view=RulesCard(),ephemeral=True)
 
   bosses.callback=open_bosses
-  raid_row.add_item(bosses)
-  hero.add_item(raid_row)
-
-  hero.add_item(
-   ui.TextDisplay(
-    "-# TFA = THE FRACTURED ARCHIVE · USE /pbsubmit TO SUBMIT A RECORD"
-   )
-  )
+  submit.callback=open_submit
+  rules.callback=open_rules
+  actions.add_item(bosses)
+  actions.add_item(submit)
+  actions.add_item(rules)
+  hero.add_item(actions)
+  hero.add_item(ui.TextDisplay(
+   "-# TFA = THE FRACTURED ARCHIVE · ONLY NOVUS-ELIGIBLE PBs"
+  ))
 
   records=ui.Container(accent_colour=BLUE)
-  records.add_item(
-   ui.TextDisplay(
-    "### RAID RECORDS\n"
-    "-# FASTEST APPROVED TIMES ACROSS EACH RAID"
-   )
-  )
-
-  raid_leaders=raid_leaders or {}
+  records.add_item(ui.TextDisplay(
+   "### RAID SNAPSHOT\n"
+   "-# APPROVED RUNS ACROSS MODES · BROWSE A RAID FOR CATEGORY RANKINGS"
+  ))
   for idx,activity in enumerate(RAIDS):
    if idx:
     records.add_item(ui.Separator())
-
    results=raid_leaders.get(activity,[])
-   lines=[
-    f"### {RAID_LABELS[activity]} · {clean(activity)}"
-   ]
-
+   lines=[f"### {RAID_LABELS[activity]} · {clean(activity)}"]
    if results:
-    for k,r in enumerate(results):
-     proof=(
-      f" · [proof]({r['proof']})"
-      if r["proof"] and valid_url(r["proof"])
-      else ""
-     )
-     lines.append(
-      f"{MEDALS[k]} **{fmt(r['ms'])}** · {clean(r['variant'])}{proof}\n"
-      f"-# {clean(r['members'])}"
-     )
+    lines.extend(short_record(r,k,include_variant=True) for k,r in enumerate(results))
    else:
-    lines.append("-# No approved records yet.")
-
-   badge=ui.Button(
-    label="TOP 3",
-    style=discord.ButtonStyle.secondary,
-    disabled=True
-   )
-   records.add_item(
-    ui.Section(
-     ui.TextDisplay("\n".join(lines)),
-     accessory=badge
+    lines.append("-# No approved records yet · Submit with /pbsubmit")
+   records.add_item(ui.Section(
+    ui.TextDisplay("\n".join(lines)),
+    accessory=ui.Button(
+     label="TOP 3",style=discord.ButtonStyle.secondary,disabled=True
     )
-   )
+   ))
+
+  recent_panel=ui.Container(accent_colour=BLUE)
+  updated=discord_updated(recent[0]["updated"]) if recent else None
+  recent_panel.add_item(ui.TextDisplay(
+   "### RECENT PBs\n"
+   + (f"-# UPDATED {updated}" if updated else "-# LATEST APPROVALS")
+  ))
+  if not recent:
+   recent_panel.add_item(ui.TextDisplay(
+    "-# No approved records yet. Be the first to submit a Novus PB."
+   ))
+  else:
+   for idx,r in enumerate(recent):
+    activity=RAID_LABELS.get(r["activity"],r["activity"])
+    recent_panel.add_item(ui.TextDisplay(
+     f"**{clean(activity)} · {clean(r['variant'])}**\n"
+     f"{fmt(r['ms'])} · {clean(r['members'])}"
+     + (f" · [↗ Proof]({r['proof']})"
+        if r["proof"] and valid_url(r["proof"]) else "")
+    ))
+    if idx!=len(recent)-1:
+     recent_panel.add_item(ui.Separator())
 
   self.add_item(hero)
   self.add_item(records)
+  self.add_item(recent_panel)
 
  @classmethod
  async def make(cls,g):
-  return cls({
+  leaders={
    activity:await store.raid_top3(g,activity)
    for activity in RAIDS
-  })
+  }
+  return cls(leaders,await store.recent_approved(g,3))
 
 
 class RaidBrowser(ui.LayoutView):
@@ -299,51 +369,32 @@ class RaidBrowser(ui.LayoutView):
   variant=variants[variant_index]
 
   panel=ui.Container(accent_colour=GOLD)
-
-  panel.add_item(
-   ui.TextDisplay(
-    f"## {RAID_LABELS[activity]} · {clean(activity)}\n"
-    f"-# VERIFIED NOVUS PERSONAL BESTS · RAID {raid_index+1}/{len(activities)}"
-   )
-  )
+  panel.add_item(ui.TextDisplay(
+   f"## {RAID_LABELS[activity]} · {clean(activity)}\n"
+   f"-# VERIFIED NOVUS RECORDS · RAID {raid_index+1}/{len(activities)}"
+  ))
 
   raid_row=ui.ActionRow()
   for idx,name in enumerate(activities):
    button=ui.Button(
-    label=RAID_LABELS[name],
+    label=("✓ " if idx==raid_index else "")+RAID_LABELS[name],
+    emoji=raid_emoji(name),
     style=(
-     discord.ButtonStyle.primary
-     if idx==raid_index
+     discord.ButtonStyle.primary if idx==raid_index
      else discord.ButtonStyle.secondary
     )
    )
-
    async def switch_raid(i,target=idx):
     await i.response.edit_message(
      view=await RaidBrowser.make(self.g,target,0)
     )
-
    button.callback=switch_raid
    raid_row.add_item(button)
-
-  bosses=ui.Button(
-   label="Bosses",
-   style=discord.ButtonStyle.secondary
-  )
-
-  async def open_bosses(i):
-   await i.response.edit_message(
-    view=await Browser.make(self.g,"Bosses",0)
-   )
-
-  bosses.callback=open_bosses
-  raid_row.add_item(bosses)
   panel.add_item(raid_row)
 
   panel.add_item(ui.Separator())
-
   variant_select=ui.Select(
-   placeholder="Choose mode / team size",
+   placeholder="Filter by mode / team size",
    min_values=1,
    max_values=1,
    options=[
@@ -355,93 +406,70 @@ class RaidBrowser(ui.LayoutView):
     for idx,name in enumerate(variants)
    ]
   )
-
   async def choose_variant(i):
    target=int(variant_select.values[0])
    await i.response.edit_message(
-    view=await RaidBrowser.make(
-     self.g,
-     self.raid_index,
-     target
-    )
+    view=await RaidBrowser.make(self.g,self.raid_index,target)
    )
-
   variant_select.callback=choose_variant
   variant_row=ui.ActionRow()
   variant_row.add_item(variant_select)
   panel.add_item(variant_row)
 
   rankings=ui.Container(accent_colour=BLUE)
-  rankings.add_item(
-   ui.TextDisplay(
-    f"### {clean(variant)} · TOP 5\n"
-    "-# FASTEST APPROVED TIMES"
-   )
-  )
+  rankings.add_item(ui.TextDisplay(
+   f"### {clean(variant)} · TOP 5\n"
+   "-# FASTEST APPROVED TIMES FOR THIS EXACT MODE"
+  ))
   rankings.add_item(ui.Separator())
 
-  lines=[]
-  for k in range(5):
-   if k>=len(results):
-    lines.append(f"{MEDALS[k]} —")
-    continue
-
-   r=results[k]
-   proof=(
-    f" · [↗ proof]({r['proof']})"
-    if r["proof"] and valid_url(r["proof"])
-    else ""
+  if not results:
+   rankings.add_item(ui.TextDisplay(
+    "**No approved records yet.**\n"
+    "-# Be the first to submit one using Submit PB or /pbsubmit."
+   ))
+  else:
+   champion=results[0]
+   top_text=(
+    f"## 🥇 {fmt(champion['ms'])}\n"
+    f"**{clean(champion['members'])}**"
    )
-   lines.append(
-    f"{MEDALS[k]} **{fmt(r['ms'])}**{proof}\n"
-    f"-# {clean(r['members'])}"
-   )
-
-  rankings.add_item(
-   ui.TextDisplay("\n".join(lines))
-  )
+   if champion["proof"] and valid_url(champion["proof"]):
+    top_text+=f" · [↗ Proof]({champion['proof']})"
+   rankings.add_item(ui.Section(
+    ui.TextDisplay(top_text),
+    accessory=ui.Button(
+     label="NOVUS #1",
+     style=discord.ButtonStyle.secondary,
+     disabled=True
+    )
+   ))
+   if len(results)>1:
+    rankings.add_item(ui.Separator())
+    rankings.add_item(ui.TextDisplay(
+     "\n".join(short_record(r,k) for k,r in enumerate(results) if k>0)
+    ))
 
   nav=ui.ActionRow()
-  prev=ui.Button(
-   label="‹ Previous",
-   style=discord.ButtonStyle.secondary
-  )
+  prev=ui.Button(label="‹ Previous",style=discord.ButtonStyle.secondary)
   page=ui.Button(
    label=f"{variant_index+1}/{len(variants)}",
    style=discord.ButtonStyle.secondary,
    disabled=True
   )
-  nxt=ui.Button(
-   label="Next ›",
-   style=discord.ButtonStyle.secondary
-  )
-  overview=ui.Button(
-   label="Overview",
-   style=discord.ButtonStyle.secondary
-  )
+  nxt=ui.Button(label="Next ›",style=discord.ButtonStyle.secondary)
+  overview=ui.Button(label="Overview",style=discord.ButtonStyle.secondary)
 
   async def move_prev(i):
-   await i.response.edit_message(
-    view=await RaidBrowser.make(
-     self.g,
-     self.raid_index,
-     (self.variant_index-1)%len(variants)
-    )
-   )
-
+   await i.response.edit_message(view=await RaidBrowser.make(
+    self.g,self.raid_index,(self.variant_index-1)%len(variants)
+   ))
   async def move_next(i):
-   await i.response.edit_message(
-    view=await RaidBrowser.make(
-     self.g,
-     self.raid_index,
-     (self.variant_index+1)%len(variants)
-    )
-   )
-
+   await i.response.edit_message(view=await RaidBrowser.make(
+    self.g,self.raid_index,(self.variant_index+1)%len(variants)
+   ))
   async def show_overview(i):
-   await i.response.edit_message(
-    view=await Home.make(self.g)
-   )
+   await i.response.edit_message(view=await Home.make(self.g))
 
   prev.callback=move_prev
   nxt.callback=move_next
@@ -451,6 +479,26 @@ class RaidBrowser(ui.LayoutView):
   nav.add_item(nxt)
   nav.add_item(overview)
   rankings.add_item(nav)
+
+  shortcuts=ui.ActionRow()
+  submit=ui.Button(label="Submit PB",style=discord.ButtonStyle.success)
+  rules=ui.Button(label="PB Rules",style=discord.ButtonStyle.secondary)
+  bosses=ui.Button(label="Bosses",style=discord.ButtonStyle.secondary)
+
+  async def open_submit(i):
+   await i.response.send_modal(SubmitModal())
+  async def open_rules(i):
+   await i.response.send_message(view=RulesCard(),ephemeral=True)
+  async def open_bosses(i):
+   await i.response.edit_message(view=await Browser.make(self.g,"Bosses",0))
+
+  submit.callback=open_submit
+  rules.callback=open_rules
+  bosses.callback=open_bosses
+  shortcuts.add_item(submit)
+  shortcuts.add_item(rules)
+  shortcuts.add_item(bosses)
+  rankings.add_item(shortcuts)
 
   self.add_item(panel)
   self.add_item(rankings)
@@ -463,18 +511,8 @@ class RaidBrowser(ui.LayoutView):
   variants=RAIDS[activity]
   variant_index%=len(variants)
   variant=variants[variant_index]
-  results=await store.ranking(
-   g,
-   "Raids",
-   activity,
-   variant
-  )
-  return cls(
-   g,
-   raid_index,
-   variant_index,
-   results
-  )
+  results=await store.ranking(g,"Raids",activity,variants[variant_index])
+  return cls(g,raid_index,variant_index,results)
 
 
 class Browser(ui.LayoutView):
