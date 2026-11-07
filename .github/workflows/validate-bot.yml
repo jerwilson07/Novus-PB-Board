@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'bot.py'
+      - 'tests/**'
       - 'requirements.txt'
       - '.github/workflows/validate-bot.yml'
   pull_request:
@@ -21,3 +22,4 @@ jobs:
       - run: python -m py_compile bot.py
       - run: pip install -r requirements.txt
       - run: python -c "import bot; print('Bot import verified')"
+      - run: python -m unittest discover -s tests -v
