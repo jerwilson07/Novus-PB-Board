@@ -15,6 +15,7 @@ DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
 STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.strip().isdigit()}
 GOLD=0xD9A75B
 BLUE=0x346B9E
+PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/main/assets/novus_pb_banner.jpg"
 RAIDS={
  "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
  "Chambers of Xeric":["Normal · Solo","Normal · Duo","Normal · Trio","Normal · 5-Man","Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
@@ -153,12 +154,19 @@ class Home(ui.LayoutView):
   super().__init__(timeout=None)
 
   panel=ui.Container(accent_colour=GOLD)
+
+  banner=ui.MediaGallery()
+  banner.add_item(
+   media=PB_BANNER_URL,
+   description="Novus OSRS PvM Clan celestial banner"
+  )
+  panel.add_item(banner)
+
   panel.add_item(
    ui.TextDisplay(
     "## ✦ NOVUS\n"
     "**PERSONAL BEST LEADERBOARDS**\n"
-    "-# VERIFIED CLAN RECORDS\n\n"
-    "Browse the fastest approved Novus records across raids and bosses."
+    "-# VERIFIED CLAN RECORDS"
    )
   )
 
@@ -194,13 +202,6 @@ class Home(ui.LayoutView):
     "-# No approved PBs yet. Newly approved records will appear here."
    )
   panel.add_item(ui.TextDisplay("\n\n".join(lines)))
-
-  panel.add_item(ui.Separator())
-  panel.add_item(
-   ui.TextDisplay(
-    "-# ✦ NOVUS PB ARCHIVE · Staff-verified records only"
-   )
-  )
 
   self.add_item(panel)
 
