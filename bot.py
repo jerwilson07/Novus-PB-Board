@@ -686,6 +686,37 @@ class Review(ui.LayoutView):
    )
   )
 
+  if active:
+   if leader is None:
+    comparison=(
+     "### FIRST CATEGORY RECORD\n"
+     "No approved time exists for this activity and mode. Approval would establish the first #1."
+    )
+   elif r["ms"]<leader["ms"]:
+    comparison=(
+     "### POTENTIAL NEW NOVUS #1\n"
+     f"Previous #1: **{fmt(leader['ms'])}**  →  "
+     f"Submitted: **{fmt(r['ms'])}**\n"
+     f"-# Faster by {fmt(leader['ms']-r['ms'])}"
+    )
+   elif r["ms"]==leader["ms"]:
+    comparison=(
+     "### TIES CURRENT #1\n"
+     f"Current #1: **{fmt(leader['ms'])}**  ·  "
+     f"Submitted: **{fmt(r['ms'])}**\n"
+     "-# Ties are ordered by earliest submission."
+    )
+   else:
+    comparison=(
+     "### CATEGORY LEADER COMPARISON\n"
+     f"Current #1: **{fmt(leader['ms'])}**  ·  "
+     f"Submitted: **{fmt(r['ms'])}**"
+    )
+   panel.add_item(ui.Separator())
+   panel.add_item(ui.TextDisplay(
+    comparison+"\n-# Compare within the same mode; verify date, membership, and proof."
+   ))
+
   panel.add_item(ui.Separator())
   p=r["proof"]
   if p and valid_url(p):
@@ -742,6 +773,16 @@ class Review(ui.LayoutView):
 
   self.add_item(panel)
 
+ @classmethod
+ async def make(cls,r):
+  leader=None
+  if r["status"] in ("pending","awaiting_proof"):
+   leader=await store.best_approved(
+    r["guild"],r["category"],r["activity"],r["variant"]
+   )
+  return cls(r,leader)
+
+
 async def refresh_panel(g):
  r=await store.panel(g)
  if not r:return
@@ -772,7 +813,7 @@ async def update_review(r):
  try:
   ch=bot.get_channel(r["review_channel"]) or await bot.fetch_channel(r["review_channel"])
   msg=await ch.fetch_message(r["review_message"])
-  await msg.edit(view=Review(r))
+  await msg.edit(view=await Review.make(r))
  except discord.HTTPException:logging.exception("Unable to update review")
 
 async def decide(i,sid,choice):
@@ -788,7 +829,7 @@ async def decide(i,sid,choice):
  if not await store.change(sid,r["status"],target,i.user.id):
   return await i.response.send_message("Another reviewer updated this record.",ephemeral=True)
  updated=await store.one("SELECT * FROM submissions WHERE id=?",(sid,))
- await i.response.edit_message(view=Review(updated))
+ await i.response.edit_message(view=await Review.make(updated))
  if choice=="approve":await refresh_panel(i.guild_id)
  if choice=="request":
   try:
@@ -839,7 +880,7 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
  sid=await store.add(i.guild_id,i.user.id,cat,act,variant,names,member_ids,ms,normalized_date,proof)
  r=await store.one("SELECT * FROM submissions WHERE id=?",(sid,))
  try:
-  message=await ch.send(view=Review(r),allowed_mentions=discord.AllowedMentions.none())
+  message=await ch.send(view=await Review.make(r),allowed_mentions=discord.AllowedMentions.none())
   await store.attach_review(sid,ch.id,message.id)
  except discord.HTTPException:
   logging.exception("Staff review message failed")
