@@ -174,14 +174,14 @@ class Home(ui.LayoutView):
    ui.TextDisplay(
     "## ✦ NOVUS\n"
     "### PERSONAL BEST LEADERBOARDS\n"
-    "-# CELESTIAL ARCHIVE · VERIFIED CLAN RECORDS"
+    "-# VERIFIED CLAN RECORDS"
    )
   )
 
   panel.add_item(ui.Separator())
   panel.add_item(
    ui.TextDisplay(
-    "**EXPLORE THE ARCHIVE**\n"
+    "**EXPLORE RECORDS**\n"
     "-# Select a category to view the fastest verified Novus records."
    )
   )
@@ -213,7 +213,7 @@ class Home(ui.LayoutView):
     )
   else:
    lines.append(
-    "-# The archive is empty. Newly approved PBs will appear here."
+    "-# No approved PBs yet. Newly approved records will appear here."
    )
   panel.add_item(ui.TextDisplay("\n\n".join(lines)))
 
@@ -239,7 +239,7 @@ class Browser(ui.LayoutView):
    ui.TextDisplay(
     f"## ✦ NOVUS | {cat.upper()}\n"
     f"### {clean(name)}\n"
-    f"-# CELESTIAL ARCHIVE · {index+1} OF {len(activities)} · VERIFIED TOP 5"
+    f"-# {index+1} OF {len(activities)} · VERIFIED TOP 5"
    )
   )
 
@@ -293,7 +293,7 @@ class Browser(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(
    ui.TextDisplay(
-    "-# ✦ Navigate the archive with Previous / Next"
+    "-# Use Previous / Next to browse activities"
    )
   )
 
