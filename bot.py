@@ -122,6 +122,13 @@ class Store:
   return await self.all("""SELECT * FROM submissions
   WHERE guild=? AND status='approved'
   ORDER BY updated DESC,id DESC LIMIT ?""",(g,limit))
+ async def clear_guild(self,g):
+  async with self.lock:
+   await self.conn.execute("DELETE FROM submissions WHERE guild=?",(g,))
+   remaining=await self.one("SELECT COUNT(*) AS n FROM submissions")
+   if remaining and remaining["n"]==0:
+    await self.conn.execute("DELETE FROM sqlite_sequence WHERE name='submissions'")
+   await self.conn.commit()
 store=Store()
 intents=discord.Intents.default()
 class PB(commands.Bot):
@@ -501,6 +508,39 @@ async def pbproof(i:discord.Interaction,submission_id:int,url:str="",attachment:
  updated=await store.one("SELECT * FROM submissions WHERE id=?",(submission_id,))
  await update_review(updated)
  await i.followup.send(f"Proof saved for PB #{submission_id}. Staff can review it now.",ephemeral=True)
+
+@bot.tree.command(name="pbclear",description="Clear all Novus PB submissions and leaderboard records")
+@app_commands.guild_only()
+@app_commands.default_permissions(manage_guild=True)
+async def pbclear(i:discord.Interaction):
+ if not is_staff(i):
+  return await i.response.send_message("Staff only.",ephemeral=True)
+
+ await i.response.defer(ephemeral=True,thinking=True)
+ rows=await store.all(
+  "SELECT review_channel,review_message FROM submissions WHERE guild=?",
+  (i.guild_id,)
+ )
+ deleted_cards=0
+ for r in rows:
+  if not r["review_channel"] or not r["review_message"]:
+   continue
+  try:
+   ch=bot.get_channel(r["review_channel"]) or await bot.fetch_channel(r["review_channel"])
+   msg=await ch.fetch_message(r["review_message"])
+   await msg.delete()
+   deleted_cards+=1
+  except discord.HTTPException:
+   pass
+
+ await store.clear_guild(i.guild_id)
+ await refresh_panel(i.guild_id)
+ await i.followup.send(
+  f"Cleared **{len(rows)}** PB submission(s). "
+  f"Removed **{deleted_cards}** staff review card(s). "
+  "The PB database is back to **0 submissions**.",
+  ephemeral=True
+ )
 
 @bot.tree.command(name="pbpanel",description="Create or refresh the persistent PB panel in this channel")
 @app_commands.guild_only()
