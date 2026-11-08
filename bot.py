@@ -210,6 +210,11 @@ def is_staff(i):
  m=i.user
  return m.guild_permissions.manage_guild or m.guild_permissions.administrator or bool(STAFF_ROLES.intersection(x.id for x in m.roles))
 
+def is_council_or_founder(i):
+ if not i.guild or not isinstance(i.user,discord.Member):return False
+ allowed={"council","founder"}
+ return any(role.name.casefold() in allowed for role in i.user.roles)
+
 class RulesCard(ui.LayoutView):
  def __init__(self):
   super().__init__(timeout=180)
@@ -316,24 +321,15 @@ class Home(ui.LayoutView):
   actions.add_item(rules)
   hero.add_item(actions)
   records=ui.Container(accent_colour=BLUE)
-  records.add_item(ui.TextDisplay(
-   "### RAID SNAPSHOT"
-  ))
-  for idx,activity in enumerate(RAIDS):
-   if idx:
-    records.add_item(ui.Separator())
+  snapshot=["### RAID SNAPSHOT"]
+  for activity in RAIDS:
    results=raid_leaders.get(activity,[])
-   lines=[f"### {RAID_LABELS[activity]} · {clean(activity)}"]
+   snapshot.append(f"\n**{RAID_LABELS[activity]} · {clean(activity)}**")
    if results:
-    lines.extend(short_record(r,k,include_variant=True) for k,r in enumerate(results))
+    snapshot.extend(short_record(r,k,include_variant=True) for k,r in enumerate(results))
    else:
-    lines.append("-# No approved records yet · Submit with /pbsubmit")
-   records.add_item(ui.Section(
-    ui.TextDisplay("\n".join(lines)),
-    accessory=ui.Button(
-     label="TOP 3",style=discord.ButtonStyle.secondary,disabled=True
-    )
-   ))
+    snapshot.append("-# No approved records yet · Submit with /pbsubmit")
+  records.add_item(ui.TextDisplay("\n".join(snapshot)))
 
   recent_panel=ui.Container(accent_colour=BLUE)
   updated=discord_updated(recent[0]["updated"]) if recent else None
@@ -1011,10 +1007,9 @@ async def pbproof(i:discord.Interaction,submission_id:int,url:str="",attachment:
 
 @bot.tree.command(name="pbclear",description="Clear all Novus PB submissions and leaderboard records")
 @app_commands.guild_only()
-@app_commands.default_permissions(manage_guild=True)
 async def pbclear(i:discord.Interaction):
- if not is_staff(i):
-  return await i.response.send_message("Staff only.",ephemeral=True)
+ if not is_council_or_founder(i):
+  return await i.response.send_message("Council or Founder only.",ephemeral=True)
 
  await i.response.defer(ephemeral=True,thinking=True)
  rows=await store.all(
