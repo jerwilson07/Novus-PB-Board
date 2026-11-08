@@ -247,10 +247,11 @@ class Home(ui.LayoutView):
   hero.add_item(banner)
   hero.add_item(ui.TextDisplay(
    "## NOVUS · PERSONAL BESTS\n"
-   "-# VERIFIED CLAN LEADERBOARDS · SELECT A RAID"
+   "-# VERIFIED CLAN LEADERBOARDS"
   ))
   hero.add_item(ui.Separator())
 
+  hero.add_item(ui.TextDisplay("**RAIDS**"))
   raid_row=ui.ActionRow()
   for raid_index,activity in enumerate(RAIDS):
    raid_button=ui.Button(
@@ -267,12 +268,33 @@ class Home(ui.LayoutView):
    raid_row.add_item(raid_button)
   hero.add_item(raid_row)
 
+  hero.add_item(ui.TextDisplay("**BOSSES**"))
+  boss_names=list(BOSSES)
+  boss_labels={
+   "Duke Sucellus":"Duke",
+   "The Whisperer":"Whisperer",
+   "Phantom Muspah":"Muspah",
+   "Phosani's Nightmare":"Phosani",
+  }
+  for row_start in range(0,len(boss_names),4):
+   boss_row=ui.ActionRow()
+   for boss_index in range(row_start,min(row_start+4,len(boss_names))):
+    boss_name=boss_names[boss_index]
+    boss_button=ui.Button(
+     label=boss_labels.get(boss_name,boss_name),
+     style=discord.ButtonStyle.secondary,
+     custom_id=f"pb:home:boss:{boss_index}"
+    )
+    async def open_boss(i,idx=boss_index):
+     await i.response.send_message(
+      view=await Browser.make(i.guild_id,"Bosses",idx),
+      ephemeral=True
+     )
+    boss_button.callback=open_boss
+    boss_row.add_item(boss_button)
+   hero.add_item(boss_row)
+
   actions=ui.ActionRow()
-  bosses=ui.Button(
-   label="Bosses",
-   style=discord.ButtonStyle.secondary,
-   custom_id="pb:home:bosses"
-  )
   submit=ui.Button(
    label="Submit PB",
    style=discord.ButtonStyle.success,
@@ -283,20 +305,13 @@ class Home(ui.LayoutView):
    style=discord.ButtonStyle.danger,
    custom_id="pb:home:rules"
   )
-  async def open_bosses(i):
-   await i.response.send_message(
-    view=await Browser.make(i.guild_id,"Bosses",0),
-    ephemeral=True
-   )
   async def open_submit(i):
    await i.response.send_modal(SubmitModal())
   async def open_rules(i):
    await i.response.send_message(view=RulesCard(),ephemeral=True)
 
-  bosses.callback=open_bosses
   submit.callback=open_submit
   rules.callback=open_rules
-  actions.add_item(bosses)
   actions.add_item(submit)
   actions.add_item(rules)
   hero.add_item(actions)
