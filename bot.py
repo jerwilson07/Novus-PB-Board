@@ -243,27 +243,20 @@ def is_council_or_founder(i):
  allowed={"council","founder"}
  return any(role.name.casefold() in allowed for role in i.user.roles)
 
-class RulesCard(ui.LayoutView):
+class RulesModal(ui.Modal,title="NOVUS | PB Rules"):
  def __init__(self):
-  super().__init__(timeout=180)
-  panel=ui.Container(accent_colour=GOLD)
-  panel.add_item(ui.TextDisplay(
-   "## ✦ NOVUS · PB RULES\n"
-   "-# PLEASE REVIEW BEFORE SUBMITTING"
-  ))
-  panel.add_item(ui.Separator())
-  panel.add_item(ui.TextDisplay(
+  super().__init__(timeout=300)
+  self.add_item(ui.TextDisplay(
    "**1. Novus-only records.** Your PB must have been achieved while you were "
    "a member of Novus. Older PBs are not eligible.\n\n"
    "**2. Group PBs.** Every player involved must have been a Novus member "
    "on the date of the run. List every participant accurately.\n\n"
    "**3. Record details.** Include the PB date, completion time, activity, "
    "mode/team size, and all involved players.\n\n"
-   "**4. Proof.** Provide a dated screenshot, clip, or evidence URL showing "
-   "the run and participants. Use **/pbproof** after submission to attach it. "
-   "Staff must verify eligibility and proof before approval."
+   "**4. Proof.** Provide a dated screenshot, clip, or evidence URL. "
+   "Use **/pbproof** after submitting if proof was not attached yet. "
+   "Staff verifies eligibility and proof before approval."
   ))
-  self.add_item(panel)
 
 
 class Home(ui.LayoutView):
@@ -308,9 +301,9 @@ class Home(ui.LayoutView):
    custom_id="pb:home:rules"
   )
   async def open_submit(i):
-   await i.response.send_message(view=SubmitStart(),ephemeral=True)
+   await i.response.send_modal(SubmitModal())
   async def open_rules(i):
-   await i.response.send_message(view=RulesCard(),ephemeral=True)
+   await i.response.send_modal(RulesModal())
   submit.callback=open_submit
   rules.callback=open_rules
   actions.add_item(submit)
@@ -525,9 +518,9 @@ class RaidBrowser(ui.LayoutView):
   bosses=ui.Button(label="Bosses",style=discord.ButtonStyle.secondary)
 
   async def open_submit(i):
-   await i.response.send_message(view=SubmitStart(),ephemeral=True)
+   await i.response.send_modal(SubmitModal())
   async def open_rules(i):
-   await i.response.send_message(view=RulesCard(),ephemeral=True)
+   await i.response.send_modal(RulesModal())
   async def open_bosses(i):
    await i.response.edit_message(view=await Browser.make(self.g,"Bosses",0))
 
@@ -600,9 +593,9 @@ class Browser(ui.LayoutView):
   submit=ui.Button(label="Submit PB",style=discord.ButtonStyle.success)
   rules=ui.Button(label="PB Rules",style=discord.ButtonStyle.danger)
   async def open_submit(i):
-   await i.response.send_message(view=SubmitStart(),ephemeral=True)
+   await i.response.send_modal(SubmitModal())
   async def open_rules(i):
-   await i.response.send_message(view=RulesCard(),ephemeral=True)
+   await i.response.send_modal(RulesModal())
   submit.callback=open_submit
   rules.callback=open_rules
   shortcuts.add_item(submit)
@@ -848,217 +841,155 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
   ephemeral=True
  )
 
-def submission_activity_options(category):
+def raid_submission_options():
+ options=[]
+ for activity,variants in RAIDS.items():
+  for variant in variants:
+   options.append(
+    discord.SelectOption(
+     label=f"{activity} · {variant}",
+     value=f"{activity}|||{variant}"
+    )
+   )
+ return options
+
+def boss_submission_options():
  return [
   discord.SelectOption(
    label=activity,
    value=activity,
    description=" / ".join(variants)[:100]
   )
-  for activity,variants in CATS[category].items()
+  for activity,variants in BOSSES.items()
  ]
 
-class SubmitStart(ui.LayoutView):
+class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
  def __init__(self):
   super().__init__(timeout=300)
-  panel=ui.Container(accent_colour=GOLD)
-  panel.add_item(ui.TextDisplay(
-   "## ✦ NOVUS · SUBMIT PB\n"
-   "-# CHOOSE A CATEGORY"
-  ))
-  row=ui.ActionRow()
-  raids=ui.Button(label="Raids",style=discord.ButtonStyle.primary)
-  bosses=ui.Button(label="Bosses",style=discord.ButtonStyle.secondary)
 
-  async def choose_raids(i):
-   await i.response.edit_message(view=SubmitActivityPicker("Raids"))
-  async def choose_bosses(i):
-   await i.response.edit_message(view=SubmitActivityPicker("Bosses"))
-
-  raids.callback=choose_raids
-  bosses.callback=choose_bosses
-  row.add_item(raids)
-  row.add_item(bosses)
-  panel.add_item(row)
-  self.add_item(panel)
-
-
-class SubmitActivityPicker(ui.LayoutView):
- def __init__(self,category):
-  super().__init__(timeout=300)
-  self.category=category
-
-  panel=ui.Container(accent_colour=BLUE)
-  panel.add_item(ui.TextDisplay(
-   f"## {category.upper()}\n"
-   "-# SELECT AN ACTIVITY"
-  ))
-
-  select=ui.Select(
-   placeholder="Choose raid" if category=="Raids" else "Choose boss",
-   options=submission_activity_options(category),
-   min_values=1,
-   max_values=1
+  self.raid_select=ui.Select(
+   placeholder="Choose raid + format",
+   options=raid_submission_options(),
+   min_values=0,
+   max_values=1,
+   required=False,
+   custom_id="pb:submit:raid"
   )
-
-  async def choose_activity(i):
-   activity=select.values[0]
-   variants=CATS[self.category][activity]
-   if len(variants)==1:
-    await i.response.send_modal(
-     SubmitDetailsModal(self.category,activity,variants[0])
-    )
-   else:
-    await i.response.edit_message(
-     view=SubmitModePicker(self.category,activity)
-    )
-
-  select.callback=choose_activity
-  row=ui.ActionRow()
-  row.add_item(select)
-  panel.add_item(row)
-
-  back_row=ui.ActionRow()
-  back=ui.Button(label="Back",style=discord.ButtonStyle.secondary)
-  async def go_back(i):
-   await i.response.edit_message(view=SubmitStart())
-  back.callback=go_back
-  back_row.add_item(back)
-  panel.add_item(back_row)
-
-  self.add_item(panel)
-
-
-class SubmitModePicker(ui.LayoutView):
- def __init__(self,category,activity):
-  super().__init__(timeout=300)
-  self.category=category
-  self.activity=activity
-
-  panel=ui.Container(accent_colour=BLUE)
-  panel.add_item(ui.TextDisplay(
-   f"## {clean(activity)}\n"
-   "-# SELECT MODE / TEAM SIZE"
-  ))
-
-  select=ui.Select(
-   placeholder="Choose mode / team size",
+  self.boss_select=ui.Select(
+   placeholder="Choose boss",
+   options=boss_submission_options(),
+   min_values=0,
+   max_values=1,
+   required=False,
+   custom_id="pb:submit:boss"
+  )
+  self.boss_mode_select=ui.Select(
+   placeholder="Boss mode",
    options=[
-    discord.SelectOption(label=variant,value=variant)
-    for variant in CATS[category][activity]
+    discord.SelectOption(label="Standard",value="Standard"),
+    discord.SelectOption(label="Normal",value="Normal"),
+    discord.SelectOption(label="Awakened",value="Awakened"),
    ],
-   min_values=1,
-   max_values=1
+   min_values=0,
+   max_values=1,
+   required=False,
+   custom_id="pb:submit:bossmode"
   )
-
-  async def choose_variant(i):
-   await i.response.send_modal(
-    SubmitDetailsModal(self.category,self.activity,select.values[0])
-   )
-
-  select.callback=choose_variant
-  row=ui.ActionRow()
-  row.add_item(select)
-  panel.add_item(row)
-
-  back_row=ui.ActionRow()
-  back=ui.Button(label="Back",style=discord.ButtonStyle.secondary)
-  async def go_back(i):
-   await i.response.edit_message(view=SubmitActivityPicker(self.category))
-  back.callback=go_back
-  back_row.add_item(back)
-  panel.add_item(back_row)
-
-  self.add_item(panel)
-
-
-class SubmitDetailsModal(ui.Modal,title="NOVUS | PB Submission"):
- def __init__(self,category,activity,variant):
-  super().__init__(timeout=300)
-  self.category=category
-  self.activity=activity
-  self.variant=variant
-
-  self.time_input=ui.TextInput(
-   placeholder="14:32.60",
-   max_length=20,
-   custom_id="pb:submit:time"
+  self.details_input=ui.TextInput(
+   placeholder="2026-11-08 | 14:32.60",
+   max_length=40,
+   custom_id="pb:submit:details"
   )
-  self.date_input=ui.TextInput(
-   placeholder="YYYY-MM-DD",
-   required=True,
-   min_length=8,
-   max_length=10,
-   custom_id="pb:submit:date"
-  )
-
-  required_members=team_size(category,variant)
   self.members_select=ui.UserSelect(
    placeholder="Search Discord members",
-   min_values=required_members or 1,
-   max_values=required_members or 8,
+   min_values=1,
+   max_values=8,
    custom_id="pb:submit:members"
   )
 
-  self.proof_input=ui.TextInput(
-   placeholder="https://... (optional)",
-   required=False,
-   max_length=500,
-   custom_id="pb:submit:proof"
-  )
-
-  self.add_item(
-   ui.Label(
-    text="Completion time",
-    description="Use MM:SS.ss or HH:MM:SS.ss.",
-    component=self.time_input
-   )
-  )
-  self.add_item(
-   ui.Label(
-    text="PB date",
-    description="Use YYYY-MM-DD.",
-    component=self.date_input
-   )
-  )
-  self.add_item(
-   ui.Label(
-    text="Party members",
-    description=(
-     f"Select exactly {required_members} member(s)."
-     if required_members else
-     "Select every Novus member in the run."
-    ),
-    component=self.members_select
-   )
-  )
-  self.add_item(
-   ui.Label(
-    text="Proof URL",
-    description="Optional. You can also add proof later with /pbproof.",
-    component=self.proof_input
-   )
-  )
+  self.add_item(ui.Label(
+   text="Raid PB",
+   description="Choose this OR Boss PB below.",
+   component=self.raid_select
+  ))
+  self.add_item(ui.Label(
+   text="Boss PB",
+   description="Choose this OR Raid PB above.",
+   component=self.boss_select
+  ))
+  self.add_item(ui.Label(
+   text="Boss mode",
+   description="Standard for most bosses. DT2: Normal or Awakened.",
+   component=self.boss_mode_select
+  ))
+  self.add_item(ui.Label(
+   text="PB date & completion time",
+   description="Use YYYY-MM-DD | MM:SS.ss.",
+   component=self.details_input
+  ))
+  self.add_item(ui.Label(
+   text="Party members",
+   description="Select every Novus member in the run.",
+   component=self.members_select
+  ))
 
  async def on_submit(self,i):
+  raid=self.raid_select.values
+  boss=self.boss_select.values
+  if bool(raid)==bool(boss):
+   return await i.response.send_message(
+    "Choose exactly one PB activity: either a Raid or a Boss.",
+    ephemeral=True
+   )
+
+  if raid:
+   category="Raids"
+   activity,variant=raid[0].split("|||",1)
+  else:
+   category="Bosses"
+   activity=boss[0]
+   modes=self.boss_mode_select.values
+   if not modes:
+    return await i.response.send_message(
+     "Choose a boss mode.",
+     ephemeral=True
+    )
+   variant=modes[0]
+   if variant not in BOSSES[activity]:
+    valid=" · ".join(BOSSES[activity])
+    return await i.response.send_message(
+     f"Choose a valid mode for **{activity}**: {valid}.",
+     ephemeral=True
+    )
+
+  raw=self.details_input.value.strip()
+  match=re.fullmatch(
+   r"\s*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4})\s*[|,]\s*(.+?)\s*",
+   raw
+  )
+  if not match:
+   return await i.response.send_message(
+    "Use **YYYY-MM-DD | MM:SS.ss** for the PB date and time.",
+    ephemeral=True
+   )
+
+  pb_date,time_value=match.groups()
+
   await submit(
    i,
-   self.category,
-   self.activity,
-   self.variant,
-   self.time_input.value,
-   self.date_input.value,
+   category,
+   activity,
+   variant,
+   time_value,
+   pb_date,
    self.members_select.values,
-   self.proof_input.value.strip()
+   ""
   )
 
 @bot.tree.command(name="pbsubmit",description="Submit an eligible Novus PB for staff review")
 @app_commands.guild_only()
 async def pbsubmit(i:discord.Interaction):
- await i.response.send_message(
-  view=SubmitStart(),
-  ephemeral=True
- )
+ await i.response.send_modal(SubmitModal())
 
 @bot.tree.command(name="pbproof",description="Attach proof to your pending submission")
 @app_commands.guild_only()
