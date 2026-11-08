@@ -258,6 +258,9 @@ class RulesModal(ui.Modal,title="NOVUS | PB Rules"):
    "Staff verifies eligibility and proof before approval."
   ))
 
+ async def on_submit(self,i):
+  await i.response.defer(ephemeral=True)
+
 
 class Home(ui.LayoutView):
  def __init__(self):
@@ -919,7 +922,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   ))
   self.add_item(ui.Label(
    text="Boss mode",
-   description="Standard for most bosses. DT2: Normal or Awakened.",
+   description="Only needed for DT2 bosses: Normal or Awakened.",
    component=self.boss_mode_select
   ))
   self.add_item(ui.Label(
@@ -949,14 +952,18 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    category="Bosses"
    activity=boss[0]
    modes=self.boss_mode_select.values
-   if not modes:
+   valid_modes=BOSSES[activity]
+   if len(valid_modes)==1:
+    variant=valid_modes[0]
+   elif not modes:
     return await i.response.send_message(
-     "Choose a boss mode.",
+     f"Choose a boss mode for **{activity}**.",
      ephemeral=True
     )
-   variant=modes[0]
-   if variant not in BOSSES[activity]:
-    valid=" · ".join(BOSSES[activity])
+   else:
+    variant=modes[0]
+   if variant not in valid_modes:
+    valid=" · ".join(valid_modes)
     return await i.response.send_message(
      f"Choose a valid mode for **{activity}**: {valid}.",
      ephemeral=True
