@@ -15,7 +15,6 @@ DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
 STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.strip().isdigit()}
 GOLD=0xEAC17B
 BLUE=0x57B7FF
-PB_BANNER_PATH="assets/novus_pb_banner.jpg"
 PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e56d115997dde7d1696ef4c535ce366da87ba84b/assets/novus_pb_banner.jpg"
 RAIDS={
  "The Fractured Archive":["Solo","Duo","Trio","4-Man"],
@@ -53,19 +52,6 @@ BOSSES={
  "The Whisperer":["Normal","Awakened"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
 MEDALS=["🥇","🥈","🥉","4.","5."]
-
-# A Novus custom emoji can be configured as <:name:id> in the Railway environment.
-# Unicode fallbacks make the interface usable before custom emojis are uploaded.
-RAID_EMOJI_DEFAULTS={
- "The Fractured Archive":"✨",
- "Theatre of Blood":"🩸",
- "Chambers of Xeric":"🏛️",
- "Tombs of Amascut":"🏺",
-}
-def raid_emoji(activity):
- short=RAID_LABELS[activity]
- value=os.getenv(f"PB_EMOJI_{short.upper()}",RAID_EMOJI_DEFAULTS[activity]).strip()
- return discord.PartialEmoji.from_str(value or RAID_EMOJI_DEFAULTS[activity])
 
 def public_members(r):
  try: raw=r["member_ids"]
@@ -234,7 +220,6 @@ class PB(commands.Bot):
   await store.open()
   self.add_view(Home())
   self.add_view(BossDirectory())
-  self.add_view(SnapshotPanel())
   for r in await store.all("SELECT * FROM submissions WHERE status IN ('pending','awaiting_proof') AND review_message IS NOT NULL"):
    self.add_view(await Review.make(r),message_id=r["review_message"])
   if GUILD_ID:
@@ -243,6 +228,11 @@ class PB(commands.Bot):
    await self.tree.sync(guild=guild)
   else:await self.tree.sync()
 bot=PB(command_prefix=commands.when_mentioned,intents=intents)
+
+@bot.event
+async def on_ready():
+ logging.info("Novus PB bot ready as %s (%s)",bot.user,bot.user.id)
+
 def is_staff(i):
  if not i.guild or not isinstance(i.user,discord.Member):return False
  m=i.user
@@ -412,9 +402,9 @@ class BossDirectory(ui.LayoutView):
 
   boss_names=list(BOSSES)
   for group_index,(heading,names) in enumerate(groups):
-   if group_index:
-    panel.add_item(ui.Separator())
-   panel.add_item(ui.TextDisplay(f"**{heading}**"))
+   panel.add_item(ui.TextDisplay(
+    ("\n" if group_index else "") + f"**{heading}**"
+   ))
 
    row_size=2 if heading in ("SOLO & DUO BOSSES","DT2 BOSSES") else 3
    for row_start in range(0,len(names),row_size):
@@ -1133,7 +1123,7 @@ async def pbpanel(i:discord.Interaction):
    ephemeral=True
   )
 
- # Clean up any old split-banner version and old panel before recreating one V2 card.
+ # Remove the currently tracked PB board messages before recreating them.
  for record in (await store.banner(i.guild_id),await store.panel(i.guild_id),await store.boss_panel(i.guild_id),await store.snapshot_panel(i.guild_id)):
   if not record:
    continue
