@@ -39,7 +39,7 @@ class PBLayoutTests(unittest.TestCase):
 
     def test_public_board_and_rules_render(self):
         self.assertTrue(bot.Home())
-        self.assertTrue(bot.RulesCard())
+        self.assertTrue(bot.RulesModal())
         self.assertTrue(bot.SubmitModal())
 
     def test_raid_and_boss_navigation_render(self):
