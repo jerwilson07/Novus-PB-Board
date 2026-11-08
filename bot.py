@@ -256,7 +256,6 @@ class Home(ui.LayoutView):
   for raid_index,activity in enumerate(RAIDS):
    raid_button=ui.Button(
     label=RAID_LABELS[activity],
-    emoji=raid_emoji(activity),
     style=discord.ButtonStyle.primary,
     custom_id=f"pb:home:raid:{raid_index}"
    )
@@ -277,7 +276,6 @@ class Home(ui.LayoutView):
   )
   submit=ui.Button(
    label="Submit PB",
-   emoji="➕",
    style=discord.ButtonStyle.success,
    custom_id="pb:home:submit"
   )
@@ -303,14 +301,9 @@ class Home(ui.LayoutView):
   actions.add_item(submit)
   actions.add_item(rules)
   hero.add_item(actions)
-  hero.add_item(ui.TextDisplay(
-   "-# TFA = THE FRACTURED ARCHIVE · ONLY NOVUS-ELIGIBLE PBs"
-  ))
-
   records=ui.Container(accent_colour=BLUE)
   records.add_item(ui.TextDisplay(
-   "### RAID SNAPSHOT\n"
-   "-# APPROVED RUNS ACROSS MODES · BROWSE A RAID FOR CATEGORY RANKINGS"
+   "### RAID SNAPSHOT"
   ))
   for idx,activity in enumerate(RAIDS):
    if idx:
@@ -385,7 +378,6 @@ class RaidBrowser(ui.LayoutView):
   for idx,name in enumerate(activities):
    button=ui.Button(
     label=("✓ " if idx==raid_index else "")+RAID_LABELS[name],
-    emoji=raid_emoji(name),
     style=(
      discord.ButtonStyle.primary if idx==raid_index
      else discord.ButtonStyle.secondary
