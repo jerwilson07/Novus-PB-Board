@@ -29,11 +29,27 @@ RAID_LABELS={
  "Tombs of Amascut":"ToA",
 }
 BOSSES={
- "Vardorvis":["Normal","Awakened"],"Duke Sucellus":["Normal","Awakened"],
- "Leviathan":["Normal","Awakened"],"The Whisperer":["Normal","Awakened"],
- "Phantom Muspah":["Standard"],"Phosani's Nightmare":["Standard"],
- "Gauntlet":["Regular","Corrupted"],"Fight Caves":["Standard"],"Inferno":["Standard"],
- "Colosseum":["Standard"],"Doom":["Standard"]}
+ "Inferno":["Standard"],
+ "Fortis Colosseum":["Standard"],
+ "Fight Caves":["Standard"],
+ "Alchemical Hydra":["Standard"],
+ "Araxxor":["Standard"],
+ "Grotesque Guardians":["Standard"],
+ "Corrupted Gauntlet":["Standard"],
+ "Demonic Brutus":["Standard"],
+ "Doom of Mokhaiotl":["Standard"],
+ "Gauntlet":["Standard"],
+ "Mad Angel":["Standard"],
+ "Maggot King":["Standard"],
+ "Phantom Muspah":["Standard"],
+ "Phosani's Nightmare":["Standard"],
+ "Vorkath":["Standard"],
+ "Yama":["Standard"],
+ "Zulrah":["Standard"],
+ "Duke Sucellus":["Normal","Awakened"],
+ "The Leviathan":["Normal","Awakened"],
+ "Vardorvis":["Normal","Awakened"],
+ "The Whisperer":["Normal","Awakened"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
 MEDALS=["🥇","🥈","🥉","4.","5."]
 
@@ -124,7 +140,8 @@ class Store:
   reviewer INTEGER,review_channel INTEGER,review_message INTEGER,created TEXT,updated TEXT);
   CREATE INDEX IF NOT EXISTS pb_rank ON submissions(guild,category,activity,variant,status,ms);
   CREATE TABLE IF NOT EXISTS panels(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
-  CREATE TABLE IF NOT EXISTS panel_banners(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
+  CREATE TABLE IF NOT EXISTS panel_banners(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
+  CREATE TABLE IF NOT EXISTS panel_bosses(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
   async with self.conn.execute("PRAGMA table_info(submissions)") as c:
    columns={row[1] async for row in c}
   if "member_ids" not in columns:
@@ -166,6 +183,12 @@ class Store:
    await self.conn.execute("""INSERT INTO panel_banners VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE
    SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
    await self.conn.commit()
+ async def boss_panel(self,g):return await self.one("SELECT * FROM panel_bosses WHERE guild=?",(g,))
+ async def set_boss_panel(self,g,ch,msg):
+  async with self.lock:
+   await self.conn.execute("""INSERT INTO panel_bosses VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE
+   SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
+   await self.conn.commit()
  async def ranking(self,g,cat,a,v):
   return await self.all("""SELECT * FROM submissions WHERE guild=? AND category=? AND activity=? AND variant=?
   AND status='approved' ORDER BY ms,id LIMIT 5""",(g,cat,a,v))
@@ -197,6 +220,7 @@ class PB(commands.Bot):
  async def setup_hook(self):
   await store.open()
   self.add_view(Home())
+  self.add_view(BossDirectory())
   for r in await store.all("SELECT * FROM submissions WHERE status IN ('pending','awaiting_proof') AND review_message IS NOT NULL"):
    self.add_view(await Review.make(r),message_id=r["review_message"])
   if GUILD_ID:
@@ -273,32 +297,6 @@ class Home(ui.LayoutView):
    raid_row.add_item(raid_button)
   hero.add_item(raid_row)
 
-  hero.add_item(ui.TextDisplay("**BOSSES**"))
-  boss_names=list(BOSSES)
-  boss_labels={
-   "Duke Sucellus":"Duke",
-   "The Whisperer":"Whisperer",
-   "Phantom Muspah":"Muspah",
-   "Phosani's Nightmare":"Phosani",
-  }
-  for row_start in range(0,len(boss_names),4):
-   boss_row=ui.ActionRow()
-   for boss_index in range(row_start,min(row_start+4,len(boss_names))):
-    boss_name=boss_names[boss_index]
-    boss_button=ui.Button(
-     label=boss_labels.get(boss_name,boss_name),
-     style=discord.ButtonStyle.secondary,
-     custom_id=f"pb:home:boss:{boss_index}"
-    )
-    async def open_boss(i,idx=boss_index):
-     await i.response.send_message(
-      view=await Browser.make(i.guild_id,"Bosses",idx),
-      ephemeral=True
-     )
-    boss_button.callback=open_boss
-    boss_row.add_item(boss_button)
-   hero.add_item(boss_row)
-
   actions=ui.ActionRow()
   submit=ui.Button(
    label="Submit PB",
@@ -364,6 +362,60 @@ class Home(ui.LayoutView):
    for activity in RAIDS
   }
   return cls(leaders,await store.recent_approved(g,3))
+
+
+class BossDirectory(ui.LayoutView):
+ def __init__(self):
+  super().__init__(timeout=None)
+
+  panel=ui.Container(accent_colour=BLUE)
+  panel.add_item(ui.TextDisplay(
+   "## BOSSES\n"
+   "-# SELECT A CATEGORY"
+  ))
+
+  groups=[
+   ("MINIGAMES",[
+    "Inferno","Fortis Colosseum","Fight Caves"
+   ]),
+   ("SLAYER BOSSES (A-Z)",[
+    "Alchemical Hydra","Araxxor","Grotesque Guardians"
+   ]),
+   ("SOLO & DUO BOSSES (A-Z)",[
+    "Corrupted Gauntlet","Demonic Brutus","Doom of Mokhaiotl",
+    "Gauntlet","Mad Angel","Maggot King","Phantom Muspah",
+    "Phosani's Nightmare","Vorkath","Yama","Zulrah"
+   ]),
+   ("DT2 BOSSES",[
+    "Duke Sucellus","The Leviathan","Vardorvis","The Whisperer"
+   ])
+  ]
+
+  boss_names=list(BOSSES)
+  for group_index,(heading,names) in enumerate(groups):
+   if group_index:
+    panel.add_item(ui.Separator())
+   panel.add_item(ui.TextDisplay(f"**{heading}**"))
+
+   for row_start in range(0,len(names),4):
+    row=ui.ActionRow()
+    for name in names[row_start:row_start+4]:
+     idx=boss_names.index(name)
+     button=ui.Button(
+      label=name,
+      style=discord.ButtonStyle.secondary,
+      custom_id=f"pb:bossdir:{idx}"
+     )
+     async def open_boss(i,target=idx):
+      await i.response.send_message(
+       view=await Browser.make(i.guild_id,"Bosses",target),
+       ephemeral=True
+      )
+     button.callback=open_boss
+     row.add_item(button)
+    panel.add_item(row)
+
+  self.add_item(panel)
 
 
 class RaidBrowser(ui.LayoutView):
@@ -1052,7 +1104,7 @@ async def pbpanel(i:discord.Interaction):
   )
 
  # Clean up any old split-banner version and old panel before recreating one V2 card.
- for record in (await store.banner(i.guild_id),await store.panel(i.guild_id)):
+ for record in (await store.banner(i.guild_id),await store.panel(i.guild_id),await store.boss_panel(i.guild_id)):
   if not record:
    continue
   try:
@@ -1064,12 +1116,14 @@ async def pbpanel(i:discord.Interaction):
 
  try:
   panel_msg=await i.channel.send(view=await Home.make(i.guild_id))
+  boss_msg=await i.channel.send(view=BossDirectory())
   await store.set_panel(i.guild_id,i.channel_id,panel_msg.id)
+  await store.set_boss_panel(i.guild_id,i.channel_id,boss_msg.id)
   async with store.lock:
    await store.conn.execute("DELETE FROM panel_banners WHERE guild=?",(i.guild_id,))
    await store.conn.commit()
   await i.followup.send(
-   "Refreshed the Novus PB board as one Components V2 card.",
+   "Refreshed the Novus PB board with separate Raids and Bosses panels.",
    ephemeral=True
   )
  except discord.Forbidden:
