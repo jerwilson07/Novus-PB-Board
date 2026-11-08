@@ -255,7 +255,9 @@ class RulesModal(ui.Modal,title="NOVUS | PB Rules"):
    "mode/team size, and all involved players.\n\n"
    "**4. Proof.** Provide a dated screenshot, clip, or evidence URL. "
    "Use **/pbproof** after submitting if proof was not attached yet. "
-   "Staff verifies eligibility and proof before approval."
+   "Staff verifies eligibility and proof before approval.\n\n"
+   "-# **Submit below only acknowledges these rules and closes this window. "
+   "It does not submit a PB.**"
   ))
 
  async def on_submit(self,i):
