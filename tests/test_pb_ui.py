@@ -40,14 +40,14 @@ class PBLayoutTests(unittest.TestCase):
     def test_public_board_and_rules_render(self):
         self.assertTrue(bot.Home())
         self.assertTrue(bot.RulesModal())
-        self.assertTrue(bot.SubmitModal())
+        self.assertTrue(bot.SubmitPicker())
+        self.assertTrue(bot.BossSubmitPicker())
 
     def test_raid_submission_flow_is_filtered(self):
         self.assertEqual(
-            [option.label for option in bot.submission_target_options()[:4]],
+            [option.label for option in bot.raid_activity_options()],
             list(bot.RAIDS),
         )
-        self.assertEqual(bot.submission_target_options()[-1].label, "Boss PB")
         self.assertEqual(
             [option.label for option in bot.raid_format_options("The Fractured Archive")],
             ["Solo", "Duo", "Trio", "4-Man"],
@@ -56,10 +56,12 @@ class PBLayoutTests(unittest.TestCase):
             [option.label for option in bot.raid_format_options("Tombs of Amascut")],
             ["Expert · Solo", "Expert · 8-Man"],
         )
-        self.assertTrue(bot.RaidDetailsModal("Theatre of Blood"))
-        self.assertTrue(bot.BossPickerModal())
-        self.assertTrue(bot.BossDetailsModal("Inferno"))
-        self.assertTrue(bot.BossDetailsModal("Vardorvis"))
+        self.assertTrue(bot.SubmitPicker("Theatre of Blood"))
+        self.assertTrue(bot.SubmitPicker("Theatre of Blood", "Normal · Trio"))
+        self.assertTrue(bot.BossSubmitPicker("Inferno", "Standard"))
+        self.assertTrue(
+            bot.SubmitDetailsModal("Raids", "The Fractured Archive", "Trio")
+        )
 
     def test_paired_bosses_stay_adjacent_in_submission_order(self):
         bosses = list(bot.BOSSES)
