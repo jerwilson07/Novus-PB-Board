@@ -846,11 +846,21 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
   ephemeral=True
  )
 
-def raid_activity_options():
- return [
-  discord.SelectOption(label=activity,value=activity)
+def submission_target_options():
+ options=[
+  discord.SelectOption(
+   label=activity,
+   value=f"raid|||{activity}"
+  )
   for activity in RAIDS
  ]
+ options.append(
+  discord.SelectOption(
+   label="Boss PB",
+   value="boss"
+  )
+ )
+ return options
 
 def raid_format_options(activity):
  return [
@@ -876,50 +886,32 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   super().__init__(timeout=300)
 
   self.add_item(ui.TextDisplay(
-   "-# Choose either a raid or a boss. Submit continues to the PB details."
+   "-# Choose a raid below, or choose Boss PB. Submit continues to the next step."
   ))
 
-  self.raid_select=ui.Select(
-   placeholder="Choose raid",
-   options=raid_activity_options(),
-   min_values=0,
+  self.target_select=ui.Select(
+   placeholder="Choose PB type",
+   options=submission_target_options(),
+   min_values=1,
    max_values=1,
-   required=False,
-   custom_id="pb:submit:raid"
-  )
-  self.boss_select=ui.Select(
-   placeholder="Choose boss",
-   options=boss_submission_options(),
-   min_values=0,
-   max_values=1,
-   required=False,
-   custom_id="pb:submit:boss"
+   required=True,
+   custom_id="pb:submit:target"
   )
 
   self.add_item(ui.Label(
-   text="Raid PB",
-   description="Choose this OR Boss PB below.",
-   component=self.raid_select
-  ))
-  self.add_item(ui.Label(
-   text="Boss PB",
-   description="Choose this OR Raid PB above.",
-   component=self.boss_select
+   text="What are you submitting?",
+   description="Choose one raid or Boss PB.",
+   component=self.target_select
   ))
 
  async def on_submit(self,i):
-  raid=self.raid_select.values
-  boss=self.boss_select.values
-  if bool(raid)==bool(boss):
-   return await i.response.send_message(
-    "Choose exactly one PB activity: either a Raid or a Boss.",
-    ephemeral=True
-   )
+  target=self.target_select.values[0]
 
-  if raid:
-   return await i.response.send_modal(RaidDetailsModal(raid[0]))
+  if target=="boss":
+   return await i.response.send_modal(BossPickerModal())
 
-  await i.response.send_modal(BossDetailsModal(boss[0]))
+  _,activity=target.split("|||",1)
+  await i.response.send_modal(RaidDetailsModal(activity))
 
 
 class RaidDetailsModal(ui.Modal,title="NOVUS | Raid PB"):
@@ -988,7 +980,36 @@ class RaidDetailsModal(ui.Modal,title="NOVUS | Raid PB"):
   )
 
 
-class BossDetailsModal(ui.Modal,title="NOVUS | Boss PB"):
+class BossPickerModal(ui.Modal,title="NOVUS | Boss PB"):
+ def __init__(self):
+  super().__init__(timeout=300)
+
+  self.add_item(ui.TextDisplay(
+   "-# Choose the boss. Submit continues to the PB details."
+  ))
+
+  self.boss_select=ui.Select(
+   placeholder="Choose boss",
+   options=boss_submission_options(),
+   min_values=1,
+   max_values=1,
+   required=True,
+   custom_id="pb:submit:boss"
+  )
+
+  self.add_item(ui.Label(
+   text="Boss",
+   description="Choose the boss for this PB.",
+   component=self.boss_select
+  ))
+
+ async def on_submit(self,i):
+  await i.response.send_modal(
+   BossDetailsModal(self.boss_select.values[0])
+  )
+
+
+class BossDetailsModal(ui.Modal,title="NOVUS | Boss PB Details"):
  def __init__(self,activity):
   super().__init__(timeout=300)
   self.activity=activity
