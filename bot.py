@@ -141,7 +141,8 @@ class Store:
   CREATE INDEX IF NOT EXISTS pb_rank ON submissions(guild,category,activity,variant,status,ms);
   CREATE TABLE IF NOT EXISTS panels(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
   CREATE TABLE IF NOT EXISTS panel_banners(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
-  CREATE TABLE IF NOT EXISTS panel_bosses(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
+  CREATE TABLE IF NOT EXISTS panel_bosses(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
+  CREATE TABLE IF NOT EXISTS panel_snapshot(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
   async with self.conn.execute("PRAGMA table_info(submissions)") as c:
    columns={row[1] async for row in c}
   if "member_ids" not in columns:
@@ -189,6 +190,12 @@ class Store:
    await self.conn.execute("""INSERT INTO panel_bosses VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE
    SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
    await self.conn.commit()
+ async def snapshot_panel(self,g):return await self.one("SELECT * FROM panel_snapshot WHERE guild=?",(g,))
+ async def set_snapshot_panel(self,g,ch,msg):
+  async with self.lock:
+   await self.conn.execute("""INSERT INTO panel_snapshot VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE
+   SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
+   await self.conn.commit()
  async def ranking(self,g,cat,a,v):
   return await self.all("""SELECT * FROM submissions WHERE guild=? AND category=? AND activity=? AND variant=?
   AND status='approved' ORDER BY ms,id LIMIT 5""",(g,cat,a,v))
@@ -221,6 +228,7 @@ class PB(commands.Bot):
   await store.open()
   self.add_view(Home())
   self.add_view(BossDirectory())
+  self.add_view(SnapshotPanel())
   for r in await store.all("SELECT * FROM submissions WHERE status IN ('pending','awaiting_proof') AND review_message IS NOT NULL"):
    self.add_view(await Review.make(r),message_id=r["review_message"])
   if GUILD_ID:
@@ -263,20 +271,15 @@ class RulesCard(ui.LayoutView):
 
 
 class Home(ui.LayoutView):
- def __init__(self,raid_leaders=None,recent=None):
+ def __init__(self):
   super().__init__(timeout=None)
-  raid_leaders=raid_leaders or {}
-  recent=recent or []
 
   hero=ui.Container(accent_colour=GOLD)
   banner=ui.MediaGallery()
-  banner.add_item(
-   media=PB_BANNER_URL
-  )
+  banner.add_item(media=PB_BANNER_URL)
   hero.add_item(banner)
   hero.add_item(ui.TextDisplay(
-   "## NOVUS · PERSONAL BESTS\n"
-   "-# VERIFIED CLAN LEADERBOARDS"
+   "## NOVUS · PERSONAL BESTS"
   ))
   hero.add_item(ui.Separator())
 
@@ -312,12 +315,21 @@ class Home(ui.LayoutView):
    await i.response.send_modal(SubmitModal())
   async def open_rules(i):
    await i.response.send_message(view=RulesCard(),ephemeral=True)
-
   submit.callback=open_submit
   rules.callback=open_rules
   actions.add_item(submit)
   actions.add_item(rules)
   hero.add_item(actions)
+
+  self.add_item(hero)
+
+
+class SnapshotPanel(ui.LayoutView):
+ def __init__(self,raid_leaders=None,recent=None):
+  super().__init__(timeout=None)
+  raid_leaders=raid_leaders or {}
+  recent=recent or []
+
   records=ui.Container(accent_colour=BLUE)
   snapshot=["### RAID SNAPSHOT"]
   for activity in RAIDS:
@@ -332,8 +344,8 @@ class Home(ui.LayoutView):
   recent_panel=ui.Container(accent_colour=BLUE)
   updated=discord_updated(recent[0]["updated"]) if recent else None
   recent_panel.add_item(ui.TextDisplay(
-   "### RECENT PBs\n"
-   + (f"-# UPDATED {updated}" if updated else "-# LATEST APPROVALS")
+   "### RECENT PBs"
+   + (f"\n-# UPDATED {updated}" if updated else "")
   ))
   if not recent:
    recent_panel.add_item(ui.TextDisplay(
@@ -351,7 +363,6 @@ class Home(ui.LayoutView):
     if idx!=len(recent)-1:
      recent_panel.add_item(ui.Separator())
 
-  self.add_item(hero)
   self.add_item(records)
   self.add_item(recent_panel)
 
@@ -378,10 +389,10 @@ class BossDirectory(ui.LayoutView):
    ("MINIGAMES",[
     "Inferno","Fortis Colosseum","Fight Caves"
    ]),
-   ("SLAYER BOSSES (A-Z)",[
+   ("SLAYER BOSSES",[
     "Alchemical Hydra","Araxxor","Grotesque Guardians"
    ]),
-   ("SOLO & DUO BOSSES (A-Z)",[
+   ("SOLO & DUO BOSSES",[
     "Corrupted Gauntlet","Demonic Brutus","Doom of Mokhaiotl",
     "Gauntlet","Mad Angel","Maggot King","Phantom Muspah",
     "Phosani's Nightmare","Vorkath","Yama","Zulrah"
@@ -812,29 +823,13 @@ class Review(ui.LayoutView):
 
 
 async def refresh_panel(g):
- r=await store.panel(g)
+ r=await store.snapshot_panel(g)
  if not r:return
  try:
   ch=bot.get_channel(r["channel"]) or await bot.fetch_channel(r["channel"])
   msg=await ch.fetch_message(r["message"])
-  await msg.edit(view=await Home.make(g))
+  await msg.edit(view=await SnapshotPanel.make(g))
  except discord.HTTPException:logging.exception("Unable to refresh public panel")
-
-@bot.event
-async def on_ready():
- if getattr(bot,"_pb_panel_refreshed",False):
-  return
- bot._pb_panel_refreshed=True
- for record in await store.all("SELECT guild FROM panels"):
-  try:
-   await refresh_panel(record["guild"])
-  except Exception:
-   logging.exception(
-    "Unable to refresh PB panel on startup for guild %s",
-    record["guild"]
-   )
- logging.info("Novus PB bot ready as %s",bot.user)
-
 
 async def update_review(r):
  if not r["review_message"]:return
@@ -1104,7 +1099,7 @@ async def pbpanel(i:discord.Interaction):
   )
 
  # Clean up any old split-banner version and old panel before recreating one V2 card.
- for record in (await store.banner(i.guild_id),await store.panel(i.guild_id),await store.boss_panel(i.guild_id)):
+ for record in (await store.banner(i.guild_id),await store.panel(i.guild_id),await store.boss_panel(i.guild_id),await store.snapshot_panel(i.guild_id)):
   if not record:
    continue
   try:
@@ -1115,10 +1110,12 @@ async def pbpanel(i:discord.Interaction):
    pass
 
  try:
-  panel_msg=await i.channel.send(view=await Home.make(i.guild_id))
+  panel_msg=await i.channel.send(view=Home())
   boss_msg=await i.channel.send(view=BossDirectory())
+  snapshot_msg=await i.channel.send(view=await SnapshotPanel.make(i.guild_id))
   await store.set_panel(i.guild_id,i.channel_id,panel_msg.id)
   await store.set_boss_panel(i.guild_id,i.channel_id,boss_msg.id)
+  await store.set_snapshot_panel(i.guild_id,i.channel_id,snapshot_msg.id)
   async with store.lock:
    await store.conn.execute("DELETE FROM panel_banners WHERE guild=?",(i.guild_id,))
    await store.conn.commit()
