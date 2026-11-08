@@ -67,15 +67,20 @@ def raid_emoji(activity):
  value=os.getenv(f"PB_EMOJI_{short.upper()}",RAID_EMOJI_DEFAULTS[activity]).strip()
  return discord.PartialEmoji.from_str(value or RAID_EMOJI_DEFAULTS[activity])
 
+def public_members(r):
+ try: raw=r["member_ids"]
+ except (KeyError,IndexError): raw=None
+ ids=[x.strip() for x in (raw or "").split(",") if x.strip().isdigit()]
+ return " · ".join(f"<@{x}>" for x in ids) if ids else clean(r["members"])
+
 def short_record(r,rank,include_variant=False):
- medal=MEDALS[rank]
- header=f"{medal} **{fmt(r['ms'])}**"
+ lines=[f"{MEDALS[rank]} **{fmt(r['ms'])}**"]
  if include_variant:
-  header+=f" · {clean(r['variant'])}"
- header+=f" · {clean(r['members'])}"
+  lines.append(f"**{clean(r['variant'])}**")
+ lines.append(public_members(r))
  if r["proof"] and valid_url(r["proof"]):
-  header+=f" · [↗ Proof]({r['proof']})"
- return header
+  lines.append(f"[↗ Proof]({r['proof']})")
+ return "\n".join(lines)
 
 def discord_updated(timestamp):
  if not timestamp:return None
@@ -339,7 +344,7 @@ class SnapshotPanel(ui.LayoutView):
    if results:
     snapshot.extend(short_record(r,k,include_variant=True) for k,r in enumerate(results))
    else:
-    snapshot.append("-# No approved records yet · Submit with /pbsubmit")
+    snapshot.append("-# No records yet.")
   records.add_item(ui.TextDisplay("\n".join(snapshot)))
 
   recent_panel=ui.Container(accent_colour=BLUE)
@@ -350,17 +355,19 @@ class SnapshotPanel(ui.LayoutView):
   ))
   if not recent:
    recent_panel.add_item(ui.TextDisplay(
-    "-# No approved records yet. Be the first to submit a Novus PB."
+    "-# No recent PBs."
    ))
   else:
    for idx,r in enumerate(recent):
     activity=RAID_LABELS.get(r["activity"],r["activity"])
-    recent_panel.add_item(ui.TextDisplay(
+    recent_text=(
      f"**{clean(activity)} · {clean(r['variant'])}**\n"
-     f"{fmt(r['ms'])} · {clean(r['members'])}"
-     + (f" · [↗ Proof]({r['proof']})"
-        if r["proof"] and valid_url(r["proof"]) else "")
-    ))
+     f"**{fmt(r['ms'])}**\n"
+     f"{public_members(r)}"
+    )
+    if r["proof"] and valid_url(r["proof"]):
+     recent_text+=f"\n[↗ Proof]({r['proof']})"
+    recent_panel.add_item(ui.TextDisplay(recent_text))
     if idx!=len(recent)-1:
      recent_panel.add_item(ui.Separator())
 
@@ -409,7 +416,7 @@ class BossDirectory(ui.LayoutView):
     panel.add_item(ui.Separator())
    panel.add_item(ui.TextDisplay(f"**{heading}**"))
 
-   row_size=2 if heading=="SOLO & DUO BOSSES" else 4
+   row_size=2 if heading in ("SOLO & DUO BOSSES","DT2 BOSSES") else 3
    for row_start in range(0,len(names),row_size):
     row=ui.ActionRow()
     for name in names[row_start:row_start+row_size]:
@@ -492,24 +499,22 @@ class RaidBrowser(ui.LayoutView):
 
   rankings=ui.Container(accent_colour=BLUE)
   rankings.add_item(ui.TextDisplay(
-   f"### {clean(variant)} · TOP 5\n"
-   "-# FASTEST APPROVED TIMES FOR THIS EXACT MODE"
+   f"### {clean(variant)} · TOP 5"
   ))
   rankings.add_item(ui.Separator())
 
   if not results:
    rankings.add_item(ui.TextDisplay(
-    "**No approved records yet.**\n"
-    "-# Be the first to submit one using Submit PB or /pbsubmit."
+    "-# No records yet."
    ))
   else:
    champion=results[0]
    top_text=(
     f"## 🥇 {fmt(champion['ms'])}\n"
-    f"**{clean(champion['members'])}**"
+    f"{public_members(champion)}"
    )
    if champion["proof"] and valid_url(champion["proof"]):
-    top_text+=f" · [↗ Proof]({champion['proof']})"
+    top_text+=f"\n[↗ Proof]({champion['proof']})"
    rankings.add_item(ui.Section(
     ui.TextDisplay(top_text),
     accessory=ui.Button(
@@ -656,18 +661,13 @@ class Browser(ui.LayoutView):
     rankings.add_item(ui.Separator())
    lines=[f"### {clean(variant)} · TOP 5"]
    if not results:
-    lines.append("-# No approved records yet · Submit with /pbsubmit")
+    lines.append("-# No records yet.")
    else:
     for rank,r in enumerate(results):
-     line=short_record(r,rank)
-     if rank==0:line="**NOVUS #1** · "+line
-     lines.append(line)
-   rankings.add_item(ui.Section(
-    ui.TextDisplay("\n".join(lines)),
-    accessory=ui.Button(
-     label="TOP 5",style=discord.ButtonStyle.secondary,disabled=True
-    )
-   ))
+     if rank:
+      lines.append("")
+     lines.append(short_record(r,rank))
+   rankings.add_item(ui.TextDisplay("\n".join(lines)))
 
   shortcuts=ui.ActionRow()
   submit=ui.Button(label="Submit PB",style=discord.ButtonStyle.success)
@@ -830,7 +830,10 @@ async def refresh_panel(g):
  try:
   ch=bot.get_channel(r["channel"]) or await bot.fetch_channel(r["channel"])
   msg=await ch.fetch_message(r["message"])
-  await msg.edit(view=await SnapshotPanel.make(g))
+  await msg.edit(
+   view=await SnapshotPanel.make(g),
+   allowed_mentions=discord.AllowedMentions.none()
+  )
  except discord.HTTPException:logging.exception("Unable to refresh public panel")
 
 async def update_review(r):
@@ -1144,7 +1147,10 @@ async def pbpanel(i:discord.Interaction):
  try:
   panel_msg=await i.channel.send(view=Home())
   boss_msg=await i.channel.send(view=BossDirectory())
-  snapshot_msg=await i.channel.send(view=await SnapshotPanel.make(i.guild_id))
+  snapshot_msg=await i.channel.send(
+   view=await SnapshotPanel.make(i.guild_id),
+   allowed_mentions=discord.AllowedMentions.none()
+  )
   await store.set_panel(i.guild_id,i.channel_id,panel_msg.id)
   await store.set_boss_panel(i.guild_id,i.channel_id,boss_msg.id)
   await store.set_snapshot_panel(i.guild_id,i.channel_id,snapshot_msg.id)
