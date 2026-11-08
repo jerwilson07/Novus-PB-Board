@@ -1009,12 +1009,6 @@ class SubmitDetailsModal(ui.Modal,title="NOVUS | PB Submission"):
 
   self.add_item(
    ui.Label(
-    text=f"{activity} · {variant}",
-    description="Selected PB category."
-   )
-  )
-  self.add_item(
-   ui.Label(
     text="Completion time",
     description="Use MM:SS.ss or HH:MM:SS.ss.",
     component=self.time_input
