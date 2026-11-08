@@ -40,27 +40,15 @@ class PBLayoutTests(unittest.TestCase):
     def test_public_board_and_rules_render(self):
         self.assertTrue(bot.Home())
         self.assertTrue(bot.RulesModal())
-        self.assertTrue(bot.SubmitStart())
-        self.assertTrue(bot.RaidSubmitPicker())
-        self.assertTrue(bot.RaidFormatPicker("The Fractured Archive"))
-        self.assertTrue(bot.BossSubmitPicker())
-        self.assertTrue(
-            bot.SubmitDetailsModal("Raids", "The Fractured Archive", "Trio")
-        )
+        self.assertTrue(bot.SubmitModal())
 
-    def test_raid_submission_hierarchy_is_filtered(self):
-        self.assertEqual(
-            [option.label for option in bot.raid_activity_options()],
-            list(bot.RAIDS),
-        )
-        self.assertEqual(
-            [option.label for option in bot.raid_format_options("The Fractured Archive")],
-            ["Solo", "Duo", "Trio", "4-Man"],
-        )
-        self.assertEqual(
-            [option.label for option in bot.raid_format_options("Tombs of Amascut")],
-            ["Expert · Solo", "Expert · 8-Man"],
-        )
+    def test_raid_submission_options_are_compact(self):
+        labels = [option.label for option in bot.raid_submission_options()]
+        self.assertIn("TFA · Solo", labels)
+        self.assertIn("ToB · Normal · Trio", labels)
+        self.assertIn("CoX · Challenge Mode · Solo", labels)
+        self.assertIn("ToA · Expert · 8-Man", labels)
+        self.assertTrue(all("The Fractured Archive" not in label for label in labels))
 
     def test_paired_bosses_stay_adjacent_in_submission_order(self):
         bosses = list(bot.BOSSES)
