@@ -846,36 +846,42 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
   ephemeral=True
  )
 
-def raid_submission_options():
- options=[]
- for activity,variants in RAIDS.items():
-  short=RAID_LABELS[activity]
-  for variant in variants:
-   options.append(
-    discord.SelectOption(
-     label=f"{short} · {variant}",
-     value=f"{activity}|||{variant}",
-     description=activity
-    )
-   )
- return options
+def raid_activity_options():
+ return [
+  discord.SelectOption(label=activity,value=activity)
+  for activity in RAIDS
+ ]
+
+def raid_format_options(activity):
+ return [
+  discord.SelectOption(label=variant,value=variant)
+  for variant in RAIDS[activity]
+ ]
 
 def boss_submission_options():
  return [
-  discord.SelectOption(
-   label=activity,
-   value=activity
-  )
+  discord.SelectOption(label=activity,value=activity)
   for activity in BOSSES
  ]
+
+def parse_submission_details(raw):
+ match=re.fullmatch(
+  r"\s*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4})\s*[|,]\s*(.+?)\s*",
+  raw.strip()
+ )
+ return match.groups() if match else None
 
 class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
  def __init__(self):
   super().__init__(timeout=300)
 
+  self.add_item(ui.TextDisplay(
+   "-# Choose either a raid or a boss. Submit continues to the PB details."
+  ))
+
   self.raid_select=ui.Select(
-   placeholder="Choose raid + format",
-   options=raid_submission_options(),
+   placeholder="Choose raid",
+   options=raid_activity_options(),
    min_values=0,
    max_values=1,
    required=False,
@@ -889,17 +895,49 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    required=False,
    custom_id="pb:submit:boss"
   )
-  self.boss_mode_select=ui.Select(
-   placeholder="Boss mode",
-   options=[
-    discord.SelectOption(label="Standard",value="Standard"),
-    discord.SelectOption(label="Normal",value="Normal"),
-    discord.SelectOption(label="Awakened",value="Awakened"),
-   ],
-   min_values=0,
+
+  self.add_item(ui.Label(
+   text="Raid PB",
+   description="Choose this OR Boss PB below.",
+   component=self.raid_select
+  ))
+  self.add_item(ui.Label(
+   text="Boss PB",
+   description="Choose this OR Raid PB above.",
+   component=self.boss_select
+  ))
+
+ async def on_submit(self,i):
+  raid=self.raid_select.values
+  boss=self.boss_select.values
+  if bool(raid)==bool(boss):
+   return await i.response.send_message(
+    "Choose exactly one PB activity: either a Raid or a Boss.",
+    ephemeral=True
+   )
+
+  if raid:
+   return await i.response.send_modal(RaidDetailsModal(raid[0]))
+
+  await i.response.send_modal(BossDetailsModal(boss[0]))
+
+
+class RaidDetailsModal(ui.Modal,title="NOVUS | Raid PB"):
+ def __init__(self,activity):
+  super().__init__(timeout=300)
+  self.activity=activity
+
+  self.add_item(ui.TextDisplay(
+   f"**{clean(activity)}**"
+  ))
+
+  self.format_select=ui.Select(
+   placeholder="Choose format",
+   options=raid_format_options(activity),
+   min_values=1,
    max_values=1,
-   required=False,
-   custom_id="pb:submit:bossmode"
+   required=True,
+   custom_id="pb:submit:raidformat"
   )
   self.details_input=ui.TextInput(
    placeholder="2026-11-08 | 14:32.60",
@@ -914,19 +952,9 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   )
 
   self.add_item(ui.Label(
-   text="Raid PB",
-   description="Choose this OR Boss PB below.",
-   component=self.raid_select
-  ))
-  self.add_item(ui.Label(
-   text="Boss PB",
-   description="Choose this OR Raid PB above.",
-   component=self.boss_select
-  ))
-  self.add_item(ui.Label(
-   text="Boss mode",
-   description="Only needed for DT2 bosses: Normal or Awakened.",
-   component=self.boss_mode_select
+   text="Raid format",
+   description="Choose the mode / team size for this raid.",
+   component=self.format_select
   ))
   self.add_item(ui.Label(
    text="PB date & completion time",
@@ -940,54 +968,96 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   ))
 
  async def on_submit(self,i):
-  raid=self.raid_select.values
-  boss=self.boss_select.values
-  if bool(raid)==bool(boss):
-   return await i.response.send_message(
-    "Choose exactly one PB activity: either a Raid or a Boss.",
-    ephemeral=True
-   )
-
-  if raid:
-   category="Raids"
-   activity,variant=raid[0].split("|||",1)
-  else:
-   category="Bosses"
-   activity=boss[0]
-   modes=self.boss_mode_select.values
-   valid_modes=BOSSES[activity]
-   if len(valid_modes)==1:
-    variant=valid_modes[0]
-   elif not modes:
-    return await i.response.send_message(
-     f"Choose a boss mode for **{activity}**.",
-     ephemeral=True
-    )
-   else:
-    variant=modes[0]
-   if variant not in valid_modes:
-    valid=" · ".join(valid_modes)
-    return await i.response.send_message(
-     f"Choose a valid mode for **{activity}**: {valid}.",
-     ephemeral=True
-    )
-
-  raw=self.details_input.value.strip()
-  match=re.fullmatch(
-   r"\s*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4})\s*[|,]\s*(.+?)\s*",
-   raw
-  )
-  if not match:
+  parsed=parse_submission_details(self.details_input.value)
+  if not parsed:
    return await i.response.send_message(
     "Use **YYYY-MM-DD | MM:SS.ss** for the PB date and time.",
     ephemeral=True
    )
 
-  pb_date,time_value=match.groups()
+  pb_date,time_value=parsed
   await submit(
    i,
-   category,
-   activity,
+   "Raids",
+   self.activity,
+   self.format_select.values[0],
+   time_value,
+   pb_date,
+   self.members_select.values,
+   ""
+  )
+
+
+class BossDetailsModal(ui.Modal,title="NOVUS | Boss PB"):
+ def __init__(self,activity):
+  super().__init__(timeout=300)
+  self.activity=activity
+  self.valid_modes=BOSSES[activity]
+  self.mode_select=None
+
+  self.add_item(ui.TextDisplay(
+   f"**{clean(activity)}**"
+  ))
+
+  if len(self.valid_modes)>1:
+   self.mode_select=ui.Select(
+    placeholder="Choose mode",
+    options=[
+     discord.SelectOption(label=variant,value=variant)
+     for variant in self.valid_modes
+    ],
+    min_values=1,
+    max_values=1,
+    required=True,
+    custom_id="pb:submit:bossmode"
+   )
+   self.add_item(ui.Label(
+    text="Boss mode",
+    description="Choose the mode for this boss.",
+    component=self.mode_select
+   ))
+
+  self.details_input=ui.TextInput(
+   placeholder="2026-11-08 | 14:32.60",
+   max_length=40,
+   custom_id="pb:submit:details"
+  )
+  self.members_select=ui.UserSelect(
+   placeholder="Search Discord member",
+   min_values=1,
+   max_values=1,
+   custom_id="pb:submit:members"
+  )
+
+  self.add_item(ui.Label(
+   text="PB date & completion time",
+   description="Use YYYY-MM-DD | MM:SS.ss.",
+   component=self.details_input
+  ))
+  self.add_item(ui.Label(
+   text="Player",
+   description="Select the Novus member who achieved the PB.",
+   component=self.members_select
+  ))
+
+ async def on_submit(self,i):
+  parsed=parse_submission_details(self.details_input.value)
+  if not parsed:
+   return await i.response.send_message(
+    "Use **YYYY-MM-DD | MM:SS.ss** for the PB date and time.",
+    ephemeral=True
+   )
+
+  variant=(
+   self.valid_modes[0]
+   if len(self.valid_modes)==1
+   else self.mode_select.values[0]
+  )
+  pb_date,time_value=parsed
+  await submit(
+   i,
+   "Bosses",
+   self.activity,
    variant,
    time_value,
    pb_date,
