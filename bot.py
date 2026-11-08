@@ -51,7 +51,7 @@ BOSSES={
  "Vardorvis":["Normal","Awakened"],
  "The Whisperer":["Normal","Awakened"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
-MEDALS=["🥇","🥈","🥉","4.","5."]
+MEDALS=["🥇","🥈","🥉","4.","5."]\nPB_EARLIEST_DATE=datetime(2026,11,7).date()\n\ndef pb_date_eligible(value):\n return value>=PB_EARLIEST_DATE
 
 def public_members(r):
  try: raw=r["member_ids"]
@@ -805,6 +805,11 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
  if parsed_date is None:
   return await i.response.send_message(
    "Enter the PB date as YYYY-MM-DD or MM/DD/YYYY.",
+   ephemeral=True
+  )
+ if not pb_date_eligible(parsed_date):
+  return await i.response.send_message(
+   "Only PBs achieved on or after **November 7, 2026** are eligible.",
    ephemeral=True
   )
  if parsed_date>datetime.now(timezone.utc).date():
