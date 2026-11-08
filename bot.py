@@ -280,7 +280,7 @@ class Home(ui.LayoutView):
   )
   rules=ui.Button(
    label="PB Rules",
-   style=discord.ButtonStyle.secondary,
+   style=discord.ButtonStyle.danger,
    custom_id="pb:home:rules"
   )
   async def open_bosses(i):
@@ -480,7 +480,7 @@ class RaidBrowser(ui.LayoutView):
 
   shortcuts=ui.ActionRow()
   submit=ui.Button(label="Submit PB",style=discord.ButtonStyle.success)
-  rules=ui.Button(label="PB Rules",style=discord.ButtonStyle.secondary)
+  rules=ui.Button(label="PB Rules",style=discord.ButtonStyle.danger)
   bosses=ui.Button(label="Bosses",style=discord.ButtonStyle.secondary)
 
   async def open_submit(i):
@@ -595,7 +595,7 @@ class Browser(ui.LayoutView):
 
   shortcuts=ui.ActionRow()
   submit=ui.Button(label="Submit PB",style=discord.ButtonStyle.success)
-  rules=ui.Button(label="PB Rules",style=discord.ButtonStyle.secondary)
+  rules=ui.Button(label="PB Rules",style=discord.ButtonStyle.danger)
   async def open_submit(i):
    await i.response.send_modal(SubmitModal())
   async def open_rules(i):
