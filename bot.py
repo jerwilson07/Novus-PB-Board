@@ -800,7 +800,7 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
 
  raw_date=pb_date.strip()
  parsed_date=None
- for date_format in ("%Y-%m-%d","%m/%d/%Y"):
+ for date_format in ("%m-%d-%Y","%Y-%m-%d","%m/%d/%Y"):
   try:
    parsed_date=datetime.strptime(raw_date,date_format).date()
    break
@@ -808,7 +808,7 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
    pass
  if parsed_date is None:
   return await i.response.send_message(
-   "Enter the PB date as YYYY-MM-DD or MM/DD/YYYY.",
+   "Enter the PB date as MM-DD-YYYY.",
    ephemeral=True
   )
  if not pb_date_eligible(parsed_date):
@@ -905,10 +905,13 @@ def boss_submission_options():
 
 def parse_submission_details(raw):
  match=re.fullmatch(
-  r"\s*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4})\s*[|,]\s*(.+?)\s*",
+  r"\s*(.+?)\s*[|,]\s*(\d{1,2}-\d{1,2}-\d{4}|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4})\s*",
   raw.strip()
  )
- return match.groups() if match else None
+ if not match:
+  return None
+ time_value,pb_date=match.groups()
+ return pb_date,time_value
 
 class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
  def __init__(self):
@@ -939,7 +942,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    custom_id="pb:submit:boss"
   )
   self.details_input=ui.TextInput(
-   placeholder="2026-11-08 | 14:32.60",
+   placeholder="14:32.60 | 11-08-2026",
    max_length=40,
    custom_id="pb:submit:details"
   )
@@ -966,8 +969,8 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    component=self.boss_select
   ))
   self.add_item(ui.Label(
-   text="PB date & completion time",
-   description="Use YYYY-MM-DD | MM:SS.ss.",
+   text="PB time & date",
+   description="Use MM:SS.ss | MM-DD-YYYY.",
    component=self.details_input
   ))
   self.add_item(ui.Label(
@@ -1013,7 +1016,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   parsed=parse_submission_details(self.details_input.value)
   if not parsed:
    return await i.response.send_message(
-    "Use **YYYY-MM-DD | MM:SS.ss** for the PB date and time.",
+    "Use **MM:SS.ss | MM-DD-YYYY** for the PB time and date.",
     ephemeral=True
    )
 
