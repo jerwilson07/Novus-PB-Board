@@ -541,7 +541,7 @@ class RaidBrowser(ui.LayoutView):
     self.g,self.raid_index,(self.variant_index+1)%len(variants)
    ))
   async def show_overview(i):
-   await i.response.edit_message(view=await Home.make(self.g))
+   await i.response.edit_message(view=Home())
 
   prev.callback=move_prev
   nxt.callback=move_next
@@ -638,7 +638,7 @@ class Browser(ui.LayoutView):
     )
    )
   async def show_overview(i):
-   await i.response.edit_message(view=await Home.make(self.g))
+   await i.response.edit_message(view=Home())
   prev.callback=move_prev
   nxt.callback=move_next
   overview.callback=show_overview
