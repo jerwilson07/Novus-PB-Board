@@ -51,7 +51,11 @@ BOSSES={
  "Vardorvis":["Normal","Awakened"],
  "The Whisperer":["Normal","Awakened"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
-MEDALS=["🥇","🥈","🥉","4.","5."]\nPB_EARLIEST_DATE=datetime(2026,11,7).date()\n\ndef pb_date_eligible(value):\n return value>=PB_EARLIEST_DATE
+MEDALS=["🥇","🥈","🥉","4.","5."]
+PB_EARLIEST_DATE=datetime(2026,11,7).date()
+
+def pb_date_eligible(value):
+ return value>=PB_EARLIEST_DATE
 
 def public_members(r):
  try: raw=r["member_ids"]
