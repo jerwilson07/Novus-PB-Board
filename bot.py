@@ -1,4 +1,5 @@
 import os, re, asyncio, logging
+from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 import discord, aiosqlite
@@ -15,7 +16,12 @@ DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
 STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.strip().isdigit()}
 GOLD=0xEAC17B
 BLUE=0x57B7FF
-PB_BANNER_URL="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e56d115997dde7d1696ef4c535ce366da87ba84b/assets/novus_pb_banner.jpg"
+# Use the uploaded animation when present in the deployed repository.
+# PB_BANNER_URL can override this with another public GIF URL.
+PB_BANNER_GIF=Path(__file__).parent / "assets" / "novus_pb_banner.gif"
+PB_BANNER_STATIC="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e56d115997dde7d1696ef4c535ce366da87ba84b/assets/novus_pb_banner.jpg"
+PB_BANNER_ANIMATED="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/main/assets/novus_pb_banner.gif"
+PB_BANNER_URL=os.getenv("PB_BANNER_URL") or (PB_BANNER_ANIMATED if PB_BANNER_GIF.is_file() else PB_BANNER_STATIC)
 RAIDS={
  "The Fractured Archive":["Solo","Duo","Trio","4-Man"],
  "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
@@ -236,6 +242,16 @@ bot=PB(command_prefix=commands.when_mentioned,intents=intents)
 @bot.event
 async def on_ready():
  logging.info("Novus PB bot ready as %s (%s)",bot.user,bot.user.id)
+ # Update the tracked message in place after the animated asset deploys.
+ # Do not delete/repost the board or alter its other panels.
+ if PB_BANNER_URL != PB_BANNER_STATIC:
+  for tracked in await store.all("SELECT channel,message FROM panels"):
+   try:
+    channel=bot.get_channel(tracked["channel"]) or await bot.fetch_channel(tracked["channel"])
+    message=await channel.fetch_message(tracked["message"])
+    await message.edit(view=Home(),allowed_mentions=discord.AllowedMentions.none())
+   except discord.HTTPException:
+    logging.exception("Could not refresh PB banner in channel %s",tracked["channel"])
 
 def is_staff(i):
  if not i.guild or not isinstance(i.user,discord.Member):return False
