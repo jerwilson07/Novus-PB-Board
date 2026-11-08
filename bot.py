@@ -656,11 +656,9 @@ class Review(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(
    ui.TextDisplay(
-    f"-# PB DATE · SUBMITTED TIME\n"
-    f"**{clean(r['pb_date'] or 'Legacy / not recorded')}** · **{fmt(r['ms'])}**\n"
-    f"**{review_members(r)}**\n\n"
-    f"-# Eligibility: the PB must have been achieved after the submitter joined Novus. "
-    f"For group PBs, every listed player must also have been a Novus member on the PB date."
+    f"-# PB DATE · TIME\n"
+    f"**{clean(r['pb_date'] or 'Not recorded')}** · **{fmt(r['ms'])}**\n"
+    f"**{review_members(r)}**"
    )
   )
 
@@ -668,31 +666,25 @@ class Review(ui.LayoutView):
    if leader is None:
     comparison=(
      "### FIRST CATEGORY RECORD\n"
-     "No approved time exists for this activity and mode. Approval would establish the first #1."
+     "-# No approved record yet."
     )
    elif r["ms"]<leader["ms"]:
     comparison=(
-     "### POTENTIAL NEW NOVUS #1\n"
-     f"Previous #1: **{fmt(leader['ms'])}**  →  "
-     f"Submitted: **{fmt(r['ms'])}**\n"
+     "### POTENTIAL NEW #1\n"
+     f"**{fmt(r['ms'])}** · current #1 **{fmt(leader['ms'])}**\n"
      f"-# Faster by {fmt(leader['ms']-r['ms'])}"
     )
    elif r["ms"]==leader["ms"]:
     comparison=(
      "### TIES CURRENT #1\n"
-     f"Current #1: **{fmt(leader['ms'])}**  ·  "
-     f"Submitted: **{fmt(r['ms'])}**\n"
-     "-# Ties are ordered by earliest submission."
+     f"**{fmt(r['ms'])}** · same as current #1"
     )
    else:
     comparison=(
-     "### CATEGORY LEADER COMPARISON\n"
-     f"Current #1: **{fmt(leader['ms'])}**  ·  "
-     f"Submitted: **{fmt(r['ms'])}**"
+     "### CURRENT #1\n"
+     f"**{fmt(leader['ms'])}** · submitted **{fmt(r['ms'])}**"
     )
-   panel.add_item(ui.TextDisplay(
-    comparison+"\n-# Compare within the same mode; verify date, membership, and proof."
-   ))
+   panel.add_item(ui.TextDisplay(comparison))
 
   panel.add_item(ui.Separator())
   p=r["proof"]
@@ -710,9 +702,8 @@ class Review(ui.LayoutView):
   else:
    panel.add_item(
     ui.TextDisplay(
-     "### ✦ PROOF\n"
-     "**Awaiting evidence**\n"
-     "-# Screenshot, clip, or URL will appear here."
+     "### PROOF\n"
+     "-# Awaiting proof."
     )
    )
 
