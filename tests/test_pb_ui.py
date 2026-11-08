@@ -40,7 +40,27 @@ class PBLayoutTests(unittest.TestCase):
     def test_public_board_and_rules_render(self):
         self.assertTrue(bot.Home())
         self.assertTrue(bot.RulesModal())
-        self.assertTrue(bot.SubmitModal())
+        self.assertTrue(bot.SubmitStart())
+        self.assertTrue(bot.RaidSubmitPicker())
+        self.assertTrue(bot.RaidFormatPicker("The Fractured Archive"))
+        self.assertTrue(bot.BossSubmitPicker())
+        self.assertTrue(
+            bot.SubmitDetailsModal("Raids", "The Fractured Archive", "Trio")
+        )
+
+    def test_raid_submission_hierarchy_is_filtered(self):
+        self.assertEqual(
+            [option.label for option in bot.raid_activity_options()],
+            list(bot.RAIDS),
+        )
+        self.assertEqual(
+            [option.label for option in bot.raid_format_options("The Fractured Archive")],
+            ["Solo", "Duo", "Trio", "4-Man"],
+        )
+        self.assertEqual(
+            [option.label for option in bot.raid_format_options("Tombs of Amascut")],
+            ["Expert · Solo", "Expert · 8-Man"],
+        )
 
     def test_paired_bosses_stay_adjacent_in_submission_order(self):
         bosses = list(bot.BOSSES)
