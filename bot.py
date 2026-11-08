@@ -43,6 +43,7 @@ BOSSES={
  "Maggot King":["Standard"],
  "Phantom Muspah":["Standard"],
  "Phosani's Nightmare":["Standard"],
+ "Royal Titans":["Standard"],
  "Vorkath":["Standard"],
  "Yama":["Standard"],
  "Zulrah":["Standard"],
@@ -395,7 +396,7 @@ class BossDirectory(ui.LayoutView):
    ("SOLO & DUO BOSSES",[
     "Corrupted Gauntlet","Demonic Brutus","Doom of Mokhaiotl",
     "Gauntlet","Mad Angel","Maggot King","Phantom Muspah",
-    "Phosani's Nightmare","Vorkath","Yama","Zulrah"
+    "Phosani's Nightmare","Royal Titans","Vorkath","Yama","Zulrah"
    ]),
    ("DT2 BOSSES",[
     "Duke Sucellus","The Leviathan","Vardorvis","The Whisperer"
@@ -408,9 +409,10 @@ class BossDirectory(ui.LayoutView):
     panel.add_item(ui.Separator())
    panel.add_item(ui.TextDisplay(f"**{heading}**"))
 
-   for row_start in range(0,len(names),4):
+   row_size=2 if heading=="SOLO & DUO BOSSES" else 4
+   for row_start in range(0,len(names),row_size):
     row=ui.ActionRow()
-    for name in names[row_start:row_start+4]:
+    for name in names[row_start:row_start+row_size]:
      idx=boss_names.index(name)
      button=ui.Button(
       label=name,
@@ -916,55 +918,65 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
   ephemeral=True
  )
 
-def submission_select_options(category):
- options=[]
- for activity,variants in CATS[category].items():
-  for variant in variants:
-   options.append(
-    discord.SelectOption(
-     label=f"{activity} · {variant}",
-     value=f"{activity}|||{variant}"
-    )
-   )
- return options
+def submission_activity_options(category):
+ return [
+  discord.SelectOption(
+   label=activity,
+   value=activity,
+   description=" / ".join(variants)[:100]
+  )
+  for activity,variants in CATS[category].items()
+ ]
+
+def submission_variant_options():
+ ordered=[]
+ for category in ("Raids","Bosses"):
+  for variants in CATS[category].values():
+   for variant in variants:
+    if variant not in ordered:
+     ordered.append(variant)
+ return [
+  discord.SelectOption(label=variant,value=variant)
+  for variant in ordered
+ ]
 
 class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
  def __init__(self):
   super().__init__(timeout=300)
 
   self.raid_select=ui.Select(
-   placeholder="Choose raid and mode",
-   options=submission_select_options("Raids"),
+   placeholder="Choose raid",
+   options=submission_activity_options("Raids"),
    min_values=0,
    max_values=1,
    required=False,
    custom_id="pb:submit:raid"
   )
   self.boss_select=ui.Select(
-   placeholder="Choose boss and mode",
-   options=submission_select_options("Bosses"),
+   placeholder="Choose boss",
+   options=submission_activity_options("Bosses"),
    min_values=0,
    max_values=1,
    required=False,
    custom_id="pb:submit:boss"
   )
-  self.time_input=ui.TextInput(
-   placeholder="14:32.60",
-   max_length=20,
-   custom_id="pb:submit:time"
+  self.variant_select=ui.Select(
+   placeholder="Choose mode / team size",
+   options=submission_variant_options(),
+   min_values=1,
+   max_values=1,
+   custom_id="pb:submit:variant"
+  )
+  self.details_input=ui.TextInput(
+   placeholder="2026-11-08 | 14:32.60",
+   max_length=40,
+   custom_id="pb:submit:details"
   )
   self.members_select=ui.UserSelect(
    placeholder="Search Discord members",
    min_values=1,
    max_values=8,
    custom_id="pb:submit:members"
-  )
-  self.date_input=ui.TextInput(
-   placeholder="YYYY-MM-DD",
-   required=True,
-   min_length=8,
-   max_length=10,
-   custom_id="pb:submit:date"
   )
 
   self.add_item(
@@ -983,22 +995,22 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   )
   self.add_item(
    ui.Label(
-    text="Completion time",
-    description="Use MM:SS.ss or HH:MM:SS.ss.",
-    component=self.time_input
+    text="Mode / team size",
+    description="Choose the mode that matches the selected activity.",
+    component=self.variant_select
    )
   )
   self.add_item(
    ui.Label(
-    text="PB date",
-    description="Must be from after you joined Novus. Use YYYY-MM-DD.",
-    component=self.date_input
+    text="PB date & completion time",
+    description="Use YYYY-MM-DD | MM:SS.ss.",
+    component=self.details_input
    )
   )
   self.add_item(
    ui.Label(
     text="Party members",
-    description="Group PB: every listed player must also be a Novus member.",
+    description="Group PB: select every Novus member in the run.",
     component=self.members_select
    )
   )
@@ -1013,16 +1025,36 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    )
 
   category="Raids" if raid else "Bosses"
-  choice=(raid or boss)[0]
-  activity,variant=choice.split("|||",1)
+  activity=(raid or boss)[0]
+  variant=self.variant_select.values[0]
+
+  if variant not in CATS[category][activity]:
+   valid=" · ".join(CATS[category][activity])
+   return await i.response.send_message(
+    f"Choose a valid mode for **{activity}**: {valid}.",
+    ephemeral=True
+   )
+
+  raw=self.details_input.value.strip()
+  match=re.fullmatch(
+   r"\s*(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4})\s*[|,]\s*(.+?)\s*",
+   raw
+  )
+  if not match:
+   return await i.response.send_message(
+    "Use **YYYY-MM-DD | MM:SS.ss** for the PB date and time.",
+    ephemeral=True
+   )
+
+  pb_date,time_value=match.groups()
 
   await submit(
    i,
    category,
    activity,
    variant,
-   self.time_input.value,
-   self.date_input.value,
+   time_value,
+   pb_date,
    self.members_select.values,
    ""
   )
