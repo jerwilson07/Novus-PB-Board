@@ -36,3 +36,7 @@ Default Unicode symbols appear if these are not configured. The bot must have ac
 5. Run `/pbpanel` in `#pb-leaderboard`, then pin the message. Existing panels automatically refresh on restart.
 
 Never put the Discord token in GitHub or public messages.
+
+## Animated PB banner
+
+To use the animated logo in the existing `/pbpanel` Components V2 media gallery, upload the actual animated GIF to `assets/novus_pb_banner.gif` on the default GitHub branch (do not rename a PNG to GIF). The bot detects this asset on startup, uses its GitHub raw GIF URL, and edits the existing tracked PB home message in place when ready. The Raids, Bosses, and recent-PBs panels are not recreated. Railway must redeploy after the file upload. Until that asset exists, the current JPG stays in place. Alternatively set `PB_BANNER_URL` to a publicly accessible direct animated GIF URL in Railway.
