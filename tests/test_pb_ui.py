@@ -42,24 +42,22 @@ class PBLayoutTests(unittest.TestCase):
         self.assertTrue(bot.RulesModal())
         self.assertTrue(bot.SubmitModal())
 
-    def test_raid_submission_flow_is_filtered(self):
+    def test_single_modal_submission_options(self):
         self.assertEqual(
             [option.label for option in bot.submission_target_options()[:4]],
             list(bot.RAIDS),
         )
         self.assertEqual(bot.submission_target_options()[-1].label, "Boss PB")
-        self.assertEqual(
-            [option.label for option in bot.raid_format_options("The Fractured Archive")],
-            ["Solo", "Duo", "Trio", "4-Man"],
-        )
-        self.assertEqual(
-            [option.label for option in bot.raid_format_options("Tombs of Amascut")],
-            ["Expert · Solo", "Expert · 8-Man"],
-        )
-        self.assertTrue(bot.RaidDetailsModal("Theatre of Blood"))
-        self.assertTrue(bot.BossPickerModal())
-        self.assertTrue(bot.BossDetailsModal("Inferno"))
-        self.assertTrue(bot.BossDetailsModal("Vardorvis"))
+        format_labels = [option.label for option in bot.submission_format_options()]
+        self.assertIn("Solo", format_labels)
+        self.assertIn("Hard Mode · Trio", format_labels)
+        self.assertIn("Expert · 8-Man", format_labels)
+        self.assertIn("Normal", format_labels)
+        self.assertIn("Awakened", format_labels)
+        boss_labels = [option.label for option in bot.boss_submission_options()]
+        self.assertIn("Inferno", boss_labels)
+        self.assertIn("Vardorvis", boss_labels)
+        self.assertTrue(bot.SubmitModal())
 
     def test_paired_bosses_stay_adjacent_in_submission_order(self):
         bosses = list(bot.BOSSES)
