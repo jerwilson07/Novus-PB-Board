@@ -40,24 +40,38 @@ class PBLayoutTests(unittest.TestCase):
     def test_public_board_and_rules_render(self):
         self.assertTrue(bot.Home())
         self.assertTrue(bot.RulesModal())
-        self.assertTrue(bot.SubmitModal())
+        self.assertTrue(bot.SubmissionChooser())
+        self.assertTrue(bot.RaidSubmitModal("Theatre of Blood"))
+        self.assertTrue(bot.BossSubmitModal())
 
-    def test_single_modal_submission_options(self):
+    def test_filtered_submission_options(self):
         self.assertEqual(
             [option.label for option in bot.submission_target_options()[:4]],
             list(bot.RAIDS),
         )
         self.assertEqual(bot.submission_target_options()[-1].label, "Boss PB")
-        format_labels = [option.label for option in bot.submission_format_options()]
-        self.assertIn("Solo", format_labels)
-        self.assertIn("Hard Mode · Trio", format_labels)
-        self.assertIn("Expert · 8-Man", format_labels)
-        self.assertIn("Normal", format_labels)
-        self.assertIn("Awakened", format_labels)
+        self.assertEqual(
+            [option.label for option in bot.raid_format_options("Theatre of Blood")],
+            [
+                "Normal · Duo",
+                "Normal · Trio",
+                "Normal · 4-Man",
+                "Normal · 5-Man",
+                "Hard Mode · Trio",
+                "Hard Mode · 4-Man",
+                "Hard Mode · 5-Man",
+            ],
+        )
+        self.assertEqual(
+            [option.label for option in bot.raid_format_options("Tombs of Amascut")],
+            ["Expert · Solo", "Expert · 8-Man"],
+        )
         boss_labels = [option.label for option in bot.boss_submission_options()]
         self.assertIn("Inferno", boss_labels)
         self.assertIn("Vardorvis", boss_labels)
-        self.assertTrue(bot.SubmitModal())
+        self.assertTrue(bot.SubmissionChooser())
+        self.assertTrue(bot.RaidSubmitModal("Theatre of Blood"))
+        self.assertTrue(bot.BossSubmitModal())
 
     def test_paired_bosses_stay_adjacent_in_submission_order(self):
         bosses = list(bot.BOSSES)
