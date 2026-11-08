@@ -864,10 +864,9 @@ def boss_submission_options():
  return [
   discord.SelectOption(
    label=activity,
-   value=activity,
-   description=" / ".join(variants)[:100]
+   value=activity
   )
-  for activity,variants in BOSSES.items()
+  for activity in BOSSES
  ]
 
 class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
