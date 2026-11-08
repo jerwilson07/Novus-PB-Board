@@ -242,8 +242,7 @@ class Home(ui.LayoutView):
   hero=ui.Container(accent_colour=GOLD)
   banner=ui.MediaGallery()
   banner.add_item(
-   media=PB_BANNER_URL,
-   description="Novus OSRS PvM Clan celestial banner"
+   media=PB_BANNER_URL
   )
   hero.add_item(banner)
   hero.add_item(ui.TextDisplay(
