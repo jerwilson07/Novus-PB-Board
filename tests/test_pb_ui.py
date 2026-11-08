@@ -59,6 +59,15 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIn("Vardorvis", boss_labels)
         self.assertTrue(bot.SubmitModal())
 
+    def test_pb_cutoff_date_is_enforced(self):
+        before = bot.datetime.strptime("2026-11-06", "%Y-%m-%d").date()
+        cutoff = bot.datetime.strptime("2026-11-07", "%Y-%m-%d").date()
+        after = bot.datetime.strptime("2026-11-08", "%Y-%m-%d").date()
+
+        self.assertFalse(bot.pb_date_eligible(before))
+        self.assertTrue(bot.pb_date_eligible(cutoff))
+        self.assertTrue(bot.pb_date_eligible(after))
+
     def test_paired_bosses_stay_adjacent_in_submission_order(self):
         bosses = list(bot.BOSSES)
         self.assertLess(bosses.index("Gauntlet"), bosses.index("Corrupted Gauntlet"))
