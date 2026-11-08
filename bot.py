@@ -275,7 +275,7 @@ class Home(ui.LayoutView):
   banner.add_item(media=PB_BANNER_URL)
   hero.add_item(banner)
   hero.add_item(ui.TextDisplay(
-   "## NOVUS · PERSONAL BESTS"
+   "## ✦ NOVUS · PERSONAL BESTS"
   ))
   hero.add_item(ui.Separator())
 
@@ -442,8 +442,8 @@ class RaidBrowser(ui.LayoutView):
 
   panel=ui.Container(accent_colour=GOLD)
   panel.add_item(ui.TextDisplay(
-   f"## {RAID_LABELS[activity]} · {clean(activity)}\n"
-   f"-# VERIFIED NOVUS RECORDS · RAID {raid_index+1}/{len(activities)}"
+   f"## ✦ NOVUS · {RAID_LABELS[activity]}\n"
+   f"**{clean(activity)}**"
   ))
 
   raid_row=ui.ActionRow()
@@ -519,36 +519,6 @@ class RaidBrowser(ui.LayoutView):
      "\n".join(short_record(r,k) for k,r in enumerate(results) if k>0)
     ))
 
-  nav=ui.ActionRow()
-  prev=ui.Button(label="‹ Previous",style=discord.ButtonStyle.secondary)
-  page=ui.Button(
-   label=f"{variant_index+1}/{len(variants)}",
-   style=discord.ButtonStyle.secondary,
-   disabled=True
-  )
-  nxt=ui.Button(label="Next ›",style=discord.ButtonStyle.secondary)
-  overview=ui.Button(label="Overview",style=discord.ButtonStyle.secondary)
-
-  async def move_prev(i):
-   await i.response.edit_message(view=await RaidBrowser.make(
-    self.g,self.raid_index,(self.variant_index-1)%len(variants)
-   ))
-  async def move_next(i):
-   await i.response.edit_message(view=await RaidBrowser.make(
-    self.g,self.raid_index,(self.variant_index+1)%len(variants)
-   ))
-  async def show_overview(i):
-   await i.response.edit_message(view=Home())
-
-  prev.callback=move_prev
-  nxt.callback=move_next
-  overview.callback=show_overview
-  nav.add_item(prev)
-  nav.add_item(page)
-  nav.add_item(nxt)
-  nav.add_item(overview)
-  rankings.add_item(nav)
-
   shortcuts=ui.ActionRow()
   submit=ui.Button(label="Submit PB",style=discord.ButtonStyle.success)
   rules=ui.Button(label="PB Rules",style=discord.ButtonStyle.danger)
@@ -595,8 +565,7 @@ class Browser(ui.LayoutView):
 
   panel=ui.Container(accent_colour=GOLD)
   panel.add_item(ui.TextDisplay(
-   f"## NOVUS · {clean(name)}\n"
-   f"-# VERIFIED {cat.upper()} RECORDS · {index+1}/{len(activities)}"
+   f"## ✦ NOVUS · {clean(name)}"
   ))
 
   tabs=ui.ActionRow()
@@ -612,38 +581,6 @@ class Browser(ui.LayoutView):
   tabs.add_item(bosses)
   panel.add_item(tabs)
   panel.add_item(ui.Separator())
-
-  nav=ui.ActionRow()
-  prev=ui.Button(label="‹ Previous",style=discord.ButtonStyle.secondary)
-  current=ui.Button(
-   label=f"{index+1}/{len(activities)}",
-   style=discord.ButtonStyle.secondary,
-   disabled=True
-  )
-  nxt=ui.Button(label="Next ›",style=discord.ButtonStyle.secondary)
-  overview=ui.Button(label="Overview",style=discord.ButtonStyle.secondary)
-  async def move_prev(i):
-   await i.response.edit_message(
-    view=await Browser.make(
-     self.g,self.cat,(self.index-1)%len(CATS[self.cat])
-    )
-   )
-  async def move_next(i):
-   await i.response.edit_message(
-    view=await Browser.make(
-     self.g,self.cat,(self.index+1)%len(CATS[self.cat])
-    )
-   )
-  async def show_overview(i):
-   await i.response.edit_message(view=Home())
-  prev.callback=move_prev
-  nxt.callback=move_next
-  overview.callback=show_overview
-  nav.add_item(prev)
-  nav.add_item(current)
-  nav.add_item(nxt)
-  nav.add_item(overview)
-  panel.add_item(nav)
 
   rankings=ui.Container(accent_colour=BLUE)
   for pos,(variant,results) in enumerate(blocks):
