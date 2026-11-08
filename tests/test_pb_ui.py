@@ -42,13 +42,22 @@ class PBLayoutTests(unittest.TestCase):
         self.assertTrue(bot.RulesModal())
         self.assertTrue(bot.SubmitModal())
 
-    def test_raid_submission_options_are_compact(self):
-        labels = [option.label for option in bot.raid_submission_options()]
-        self.assertIn("TFA · Solo", labels)
-        self.assertIn("ToB · Normal · Trio", labels)
-        self.assertIn("CoX · Challenge Mode · Solo", labels)
-        self.assertIn("ToA · Expert · 8-Man", labels)
-        self.assertTrue(all("The Fractured Archive" not in label for label in labels))
+    def test_raid_submission_flow_is_filtered(self):
+        self.assertEqual(
+            [option.label for option in bot.raid_activity_options()],
+            list(bot.RAIDS),
+        )
+        self.assertEqual(
+            [option.label for option in bot.raid_format_options("The Fractured Archive")],
+            ["Solo", "Duo", "Trio", "4-Man"],
+        )
+        self.assertEqual(
+            [option.label for option in bot.raid_format_options("Tombs of Amascut")],
+            ["Expert · Solo", "Expert · 8-Man"],
+        )
+        self.assertTrue(bot.RaidDetailsModal("Theatre of Blood"))
+        self.assertTrue(bot.BossDetailsModal("Inferno"))
+        self.assertTrue(bot.BossDetailsModal("Vardorvis"))
 
     def test_paired_bosses_stay_adjacent_in_submission_order(self):
         bosses = list(bot.BOSSES)
