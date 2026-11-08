@@ -391,9 +391,9 @@ class BossDirectory(ui.LayoutView):
     "Alchemical Hydra","Araxxor","Grotesque Guardians"
    ]),
    ("SOLO & DUO BOSSES",[
-    "Corrupted Gauntlet","Demonic Brutus","Doom of Mokhaiotl",
-    "Gauntlet","Mad Angel","Maggot King","Phantom Muspah",
-    "Phosani's Nightmare","Royal Titans","Vorkath","Yama","Zulrah"
+    "Gauntlet","Corrupted Gauntlet","Doom of Mokhaiotl","Demonic Brutus",
+    "Mad Angel","Maggot King","Phantom Muspah","Phosani's Nightmare",
+    "Royal Titans","Vorkath","Yama","Zulrah"
    ]),
    ("DT2 BOSSES",[
     "Duke Sucellus","The Leviathan","Vardorvis","The Whisperer"
