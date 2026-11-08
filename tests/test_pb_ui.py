@@ -59,6 +59,12 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIn("Vardorvis", boss_labels)
         self.assertTrue(bot.SubmitModal())
 
+    def test_pb_time_then_date_format(self):
+        self.assertEqual(
+            bot.parse_submission_details("14:32.60 | 11-08-2026"),
+            ("11-08-2026", "14:32.60"),
+        )
+
     def test_pb_cutoff_date_is_enforced(self):
         before = bot.datetime.strptime("2026-11-06", "%Y-%m-%d").date()
         cutoff = bot.datetime.strptime("2026-11-07", "%Y-%m-%d").date()
