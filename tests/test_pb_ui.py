@@ -42,6 +42,14 @@ class PBLayoutTests(unittest.TestCase):
         self.assertTrue(bot.RulesModal())
         self.assertTrue(bot.SubmitModal())
 
+    def test_paired_bosses_stay_adjacent_in_submission_order(self):
+        bosses = list(bot.BOSSES)
+        self.assertLess(bosses.index("Gauntlet"), bosses.index("Corrupted Gauntlet"))
+        self.assertEqual(bosses.index("Corrupted Gauntlet"), bosses.index("Gauntlet") + 1)
+        self.assertLess(bosses.index("Doom of Mokhaiotl"), bosses.index("Demonic Brutus"))
+        self.assertEqual(bosses.index("Demonic Brutus"), bosses.index("Doom of Mokhaiotl") + 1)
+
+
     def test_raid_and_boss_navigation_render(self):
         self.assertTrue(bot.RaidBrowser(123, 0, 0, []))
         self.assertTrue(bot.Browser(123, "Bosses", 0, [("Normal", [])]))
