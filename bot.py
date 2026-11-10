@@ -145,7 +145,8 @@ class Store:
   CREATE TABLE IF NOT EXISTS panel_banners(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
   CREATE TABLE IF NOT EXISTS panel_bosses(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
   CREATE TABLE IF NOT EXISTS boss_board_messages(guild INTEGER NOT NULL,activity TEXT NOT NULL,channel INTEGER NOT NULL,message INTEGER NOT NULL,PRIMARY KEY(guild,activity));
-  CREATE TABLE IF NOT EXISTS panel_snapshot(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
+  CREATE TABLE IF NOT EXISTS panel_snapshot(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
+  CREATE TABLE IF NOT EXISTS panel_footer(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
   async with self.conn.execute("PRAGMA table_info(submissions)") as c:
    columns={row[1] async for row in c}
   if "member_ids" not in columns:
@@ -223,6 +224,12 @@ class Store:
  async def set_snapshot_panel(self,g,ch,msg):
   async with self.lock:
    await self.conn.execute("""INSERT INTO panel_snapshot VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE
+   SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
+   await self.conn.commit()
+ async def footer(self,g):return await self.one("SELECT * FROM panel_footer WHERE guild=?",(g,))
+ async def set_footer(self,g,ch,msg):
+  async with self.lock:
+   await self.conn.execute("""INSERT INTO panel_footer VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE
    SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
    await self.conn.commit()
  async def ranking(self,g,cat,a,v):
@@ -1455,6 +1462,7 @@ async def pbpanel(i:discord.Interaction):
   await store.panel(i.guild_id),
   await store.boss_panel(i.guild_id),
   await store.snapshot_panel(i.guild_id),
+  await store.footer(i.guild_id),
  ]
  tracked_records.extend(
   await store.boss_boards(i.guild_id)
@@ -1502,7 +1510,7 @@ async def pbpanel(i:discord.Interaction):
    )
    jump_links[activity]=board_msg.jump_url
 
-  # Then the four raid boards, each showing Top 1-4 per format.
+  # Then the four raid boards, each showing Top 1-5 per format.
   for activity in RAIDS:
    board_msg=await i.channel.send(
     view=await RaidLeaderboard.make(
@@ -1548,9 +1556,15 @@ async def pbpanel(i:discord.Interaction):
    view=await SnapshotPanel.make(i.guild_id),
    allowed_mentions=discord.AllowedMentions.none()
   )
+  footer_msg=await i.channel.send(
+   f"**[↑ Click to scroll to the top]({panel_msg.jump_url})**",
+   allowed_mentions=discord.AllowedMentions.none()
+  )
+
   await store.set_panel(i.guild_id,i.channel_id,panel_msg.id)
   await store.set_boss_panel(i.guild_id,i.channel_id,boss_msg.id)
   await store.set_snapshot_panel(i.guild_id,i.channel_id,snapshot_msg.id)
+  await store.set_footer(i.guild_id,i.channel_id,footer_msg.id)
   async with store.lock:
    await store.conn.execute("DELETE FROM panel_banners WHERE guild=?",(i.guild_id,))
    await store.conn.commit()
