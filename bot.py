@@ -144,6 +144,7 @@ class Store:
   CREATE TABLE IF NOT EXISTS panels(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
   CREATE TABLE IF NOT EXISTS panel_banners(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
   CREATE TABLE IF NOT EXISTS panel_bosses(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);
+  CREATE TABLE IF NOT EXISTS boss_board_messages(guild INTEGER NOT NULL,activity TEXT NOT NULL,channel INTEGER NOT NULL,message INTEGER NOT NULL,PRIMARY KEY(guild,activity));
   CREATE TABLE IF NOT EXISTS panel_snapshot(guild INTEGER PRIMARY KEY,channel INTEGER,message INTEGER);""")
   async with self.conn.execute("PRAGMA table_info(submissions)") as c:
    columns={row[1] async for row in c}
@@ -191,6 +192,32 @@ class Store:
   async with self.lock:
    await self.conn.execute("""INSERT INTO panel_bosses VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE
    SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
+   await self.conn.commit()
+ async def boss_board(self,g,activity):
+  return await self.one(
+   "SELECT * FROM boss_board_messages WHERE guild=? AND activity=?",
+   (g,activity)
+  )
+ async def boss_boards(self,g):
+  return await self.all(
+   "SELECT * FROM boss_board_messages WHERE guild=?",
+   (g,)
+  )
+ async def set_boss_board(self,g,activity,ch,msg):
+  async with self.lock:
+   await self.conn.execute(
+    """INSERT INTO boss_board_messages(guild,activity,channel,message)
+    VALUES(?,?,?,?) ON CONFLICT(guild,activity) DO UPDATE SET
+    channel=excluded.channel,message=excluded.message""",
+    (g,activity,ch,msg)
+   )
+   await self.conn.commit()
+ async def clear_boss_boards(self,g):
+  async with self.lock:
+   await self.conn.execute(
+    "DELETE FROM boss_board_messages WHERE guild=?",
+    (g,)
+   )
    await self.conn.commit()
  async def snapshot_panel(self,g):return await self.one("SELECT * FROM panel_snapshot WHERE guild=?",(g,))
  async def set_snapshot_panel(self,g,ch,msg):
@@ -384,12 +411,14 @@ class SnapshotPanel(ui.LayoutView):
 
 
 class BossDirectory(ui.LayoutView):
- def __init__(self):
+ def __init__(self,jump_links=None):
   super().__init__(timeout=None)
+  jump_links=jump_links or {}
 
   panel=ui.Container(accent_colour=BLUE)
   panel.add_item(ui.TextDisplay(
-   "## Bosses"
+   "## Bosses\n"
+   "-# Select a boss to jump to its Top 5 leaderboard."
   ))
 
   groups=[
@@ -409,44 +438,82 @@ class BossDirectory(ui.LayoutView):
    ])
   ]
 
-  boss_names=list(BOSSES)
+  lines=[]
+  for heading,names in groups:
+   if lines:
+    lines.append("")
+   lines.append(f"### {heading}")
+   for name in names:
+    url=jump_links.get(name)
+    lines.append(
+     f"[{name}]({url})"
+     if url
+     else f"**{name}**"
+    )
 
-  for group_index,(heading,names) in enumerate(groups):
-   if group_index:
+  panel.add_item(
+   ui.TextDisplay("\n".join(lines))
+  )
+  self.add_item(panel)
+
+
+class BossLeaderboard(ui.LayoutView):
+ def __init__(self,activity,blocks):
+  super().__init__(timeout=None)
+
+  panel=ui.Container(accent_colour=BLUE)
+  panel.add_item(ui.TextDisplay(
+   f"## {clean(activity)}"
+  ))
+
+  for block_index,(variant,results) in enumerate(blocks):
+   if block_index:
     panel.add_item(ui.Separator())
 
-   panel.add_item(ui.TextDisplay(
-    f"### {heading}"
-   ))
+   lines=[]
+   if len(blocks)>1:
+    lines.append(f"### {clean(variant)}")
 
-   for row_start in range(0,len(names),3):
-    row=ui.ActionRow()
-
-    for name in names[row_start:row_start+3]:
-     idx=boss_names.index(name)
-
-     button=ui.Button(
-      label=name,
-      style=discord.ButtonStyle.secondary,
-      custom_id=f"pb:bossdir:{idx}"
+   for rank in range(5):
+    medal=MEDALS[rank]
+    if rank < len(results):
+     r=results[rank]
+     proof=(
+      f" · [Proof]({r['proof']})"
+      if r["proof"] and valid_url(r["proof"])
+      else ""
+     )
+     lines.append(
+      f"{medal} **{fmt(r['ms'])}**{proof} · {public_members(r)}"
+     )
+    else:
+     lines.append(
+      f"{medal} No record · Vacant"
      )
 
-     async def open_boss(i,target=idx):
-      await i.response.send_message(
-       view=await Browser.make(
-        i.guild_id,
-        "Bosses",
-        target
-       ),
-       ephemeral=True
-      )
-
-     button.callback=open_boss
-     row.add_item(button)
-
-    panel.add_item(row)
+   panel.add_item(
+    ui.TextDisplay("\n".join(lines))
+   )
 
   self.add_item(panel)
+
+ @classmethod
+ async def make(cls,g,activity):
+  return cls(
+   activity,
+   [
+    (
+     variant,
+     await store.ranking(
+      g,
+      "Bosses",
+      activity,
+      variant
+     )
+    )
+    for variant in BOSSES[activity]
+   ]
+  )
 
 
 class RaidBrowser(ui.LayoutView):
@@ -772,17 +839,42 @@ class Review(ui.LayoutView):
   return cls(r,leader)
 
 
-async def refresh_panel(g):
+async def refresh_panel(g,activity=None):
  r=await store.snapshot_panel(g)
- if not r:return
- try:
-  ch=bot.get_channel(r["channel"]) or await bot.fetch_channel(r["channel"])
-  msg=await ch.fetch_message(r["message"])
-  await msg.edit(
-   view=await SnapshotPanel.make(g),
-   allowed_mentions=discord.AllowedMentions.none()
-  )
- except discord.HTTPException:logging.exception("Unable to refresh public panel")
+ if r:
+  try:
+   ch=bot.get_channel(r["channel"]) or await bot.fetch_channel(r["channel"])
+   msg=await ch.fetch_message(r["message"])
+   await msg.edit(
+    view=await SnapshotPanel.make(g),
+    allowed_mentions=discord.AllowedMentions.none()
+   )
+  except discord.HTTPException:
+   logging.exception("Unable to refresh public panel")
+
+ activities=(
+  [activity]
+  if activity in BOSSES
+  else list(BOSSES)
+ )
+
+ for boss_name in activities:
+  tracked=await store.boss_board(g,boss_name)
+  if not tracked:
+   continue
+  try:
+   ch=bot.get_channel(tracked["channel"]) or await bot.fetch_channel(tracked["channel"])
+   msg=await ch.fetch_message(tracked["message"])
+   await msg.edit(
+    view=await BossLeaderboard.make(g,boss_name),
+    allowed_mentions=discord.AllowedMentions.none()
+   )
+  except discord.HTTPException:
+   logging.exception(
+    "Unable to refresh boss PB board for %s",
+    boss_name
+   )
+
 
 async def update_review(r):
  if not r["review_message"]:return
@@ -806,7 +898,7 @@ async def decide(i,sid,choice):
   return await i.response.send_message("Another reviewer updated this record.",ephemeral=True)
  updated=await store.one("SELECT * FROM submissions WHERE id=?",(sid,))
  await i.response.edit_message(view=await Review.make(updated))
- if choice=="approve":await refresh_panel(i.guild_id)
+ if choice=="approve":await refresh_panel(i.guild_id,updated["activity"])
  if choice=="request":
   try:
    user=await bot.fetch_user(r["submitter"])
@@ -1185,9 +1277,24 @@ async def pbpanel(i:discord.Interaction):
   )
 
  # Remove the currently tracked PB board messages before recreating them.
- for record in (await store.banner(i.guild_id),await store.panel(i.guild_id),await store.boss_panel(i.guild_id),await store.snapshot_panel(i.guild_id)):
+ tracked_records=[
+  await store.banner(i.guild_id),
+  await store.panel(i.guild_id),
+  await store.boss_panel(i.guild_id),
+  await store.snapshot_panel(i.guild_id),
+ ]
+ tracked_records.extend(
+  await store.boss_boards(i.guild_id)
+ )
+
+ seen_messages=set()
+ for record in tracked_records:
   if not record:
    continue
+  key=(record["channel"],record["message"])
+  if key in seen_messages:
+   continue
+  seen_messages.add(key)
   try:
    ch=bot.get_channel(record["channel"]) or await bot.fetch_channel(record["channel"])
    msg=await ch.fetch_message(record["message"])
@@ -1195,9 +1302,37 @@ async def pbpanel(i:discord.Interaction):
   except discord.HTTPException:
    pass
 
+ await store.clear_boss_boards(i.guild_id)
+
  try:
   panel_msg=await i.channel.send(view=Home())
+
+  # Post a temporary directory first so it stays above the leaderboards.
   boss_msg=await i.channel.send(view=BossDirectory())
+
+  jump_links={}
+  for activity in BOSSES:
+   board_msg=await i.channel.send(
+    view=await BossLeaderboard.make(
+     i.guild_id,
+     activity
+    ),
+    allowed_mentions=discord.AllowedMentions.none()
+   )
+   await store.set_boss_board(
+    i.guild_id,
+    activity,
+    i.channel_id,
+    board_msg.id
+   )
+   jump_links[activity]=board_msg.jump_url
+
+  # Turn each boss name into a native Discord jump link.
+  await boss_msg.edit(
+   view=BossDirectory(jump_links),
+   allowed_mentions=discord.AllowedMentions.none()
+  )
+
   snapshot_msg=await i.channel.send(
    view=await SnapshotPanel.make(i.guild_id),
    allowed_mentions=discord.AllowedMentions.none()
@@ -1209,7 +1344,7 @@ async def pbpanel(i:discord.Interaction):
    await store.conn.execute("DELETE FROM panel_banners WHERE guild=?",(i.guild_id,))
    await store.conn.commit()
   await i.followup.send(
-   "Refreshed the Novus PB board with separate Raids and Bosses panels.",
+   "Refreshed the Novus PB board with jump-linked boss Top 5 leaderboards.",
    ephemeral=True
   )
  except discord.Forbidden:
