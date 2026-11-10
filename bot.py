@@ -420,6 +420,33 @@ class BossDirectory(ui.LayoutView):
    ui.TextDisplay("\n".join(lines))
   )
 
+  boss_names=list(BOSSES)
+  boss_select=ui.Select(
+   placeholder="Select a boss to view Top 5 PBs",
+   min_values=1,
+   max_values=1,
+   options=[
+    discord.SelectOption(
+     label=name,
+     value=str(index)
+    )
+    for index,name in enumerate(boss_names)
+   ],
+   custom_id="pb:bossdir:select"
+  )
+
+  async def open_boss(i):
+   target=int(boss_select.values[0])
+   await i.response.send_message(
+    view=await Browser.make(i.guild_id,"Bosses",target),
+    ephemeral=True
+   )
+
+  boss_select.callback=open_boss
+  boss_row=ui.ActionRow()
+  boss_row.add_item(boss_select)
+  panel.add_item(boss_row)
+
   self.add_item(panel)
 
 
