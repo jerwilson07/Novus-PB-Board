@@ -270,17 +270,73 @@ class PB(commands.Bot):
   else:await self.tree.sync()
 bot=PB(command_prefix=commands.when_mentioned,intents=intents)
 
+async def calculate_pb_points(g):
+ rows=await store.approved_for_points(g)
+ placement_points=(5,3,1)
+ grouped={}
+ scores={}
+
+ for r in rows:
+  key=(
+   r["category"],
+   r["activity"],
+   r["variant"]
+  )
+  grouped.setdefault(key,[]).append(r)
+
+ for results in grouped.values():
+  for rank,r in enumerate(results[:3]):
+   raw_ids=r["member_ids"] or ""
+   member_ids={
+    int(value.strip())
+    for value in raw_ids.split(",")
+    if value.strip().isdigit()
+   }
+
+   for member_id in member_ids:
+    entry=scores.setdefault(
+     member_id,
+     {
+      "member_id":member_id,
+      "points":0,
+      "firsts":0,
+      "seconds":0,
+      "thirds":0,
+     }
+    )
+    entry["points"]+=placement_points[rank]
+    if rank==0:
+     entry["firsts"]+=1
+    elif rank==1:
+     entry["seconds"]+=1
+    else:
+     entry["thirds"]+=1
+
+ return sorted(
+  scores.values(),
+  key=lambda entry:(
+   -entry["points"],
+   -entry["firsts"],
+   -entry["seconds"],
+   -entry["thirds"],
+   entry["member_id"],
+  )
+ )[:10]
+
 @bot.event
 async def on_ready():
  logging.info("Novus PB bot ready as %s (%s)",bot.user,bot.user.id)
  # Update the tracked message in place after the animated asset deploys.
  # Do not delete/repost the board or alter its other panels.
  if PB_BANNER_URL != PB_BANNER_STATIC:
-  for tracked in await store.all("SELECT channel,message FROM panels"):
+  for tracked in await store.all("SELECT guild,channel,message FROM panels"):
    try:
     channel=bot.get_channel(tracked["channel"]) or await bot.fetch_channel(tracked["channel"])
     message=await channel.fetch_message(tracked["message"])
-    await message.edit(view=Home(),allowed_mentions=discord.AllowedMentions.none())
+    await message.edit(
+     view=await Home.make(tracked["guild"]),
+     allowed_mentions=discord.AllowedMentions.none()
+    )
    except discord.HTTPException:
     logging.exception("Could not refresh PB banner in channel %s",tracked["channel"])
 
@@ -316,8 +372,9 @@ class RulesModal(ui.Modal,title="NOVUS | PB Rules"):
 
 
 class Home(ui.LayoutView):
- def __init__(self):
+ def __init__(self,points=None):
   super().__init__(timeout=None)
+  points=points or []
 
   hero=ui.Container(accent_colour=GOLD)
   banner=ui.MediaGallery()
@@ -326,6 +383,26 @@ class Home(ui.LayoutView):
   hero.add_item(ui.TextDisplay(
    "## ✦ NOVUS · PERSONAL BESTS"
   ))
+  hero.add_item(ui.Separator())
+
+  points_lines=[
+   "### TOP 10 · PB POINTS",
+   "-# 1st = 5 pts · 2nd = 3 pts · 3rd = 1 pt",
+  ]
+
+  if not points:
+   points_lines.append("-# No approved PB points yet.")
+  else:
+   for index,entry in enumerate(points,1):
+    points_lines.append(
+     f"**{index}.** <@{entry['member_id']}> · "
+     f"**{entry['points']} pts** "
+     f"-# ({entry['firsts']} first · {entry['seconds']} second · {entry['thirds']} third)"
+    )
+
+  hero.add_item(
+   ui.TextDisplay("\n".join(points_lines))
+  )
   hero.add_item(ui.Separator())
 
   actions=ui.ActionRow()
@@ -351,33 +428,16 @@ class Home(ui.LayoutView):
 
   self.add_item(hero)
 
+ @classmethod
+ async def make(cls,g):
+  return cls(await calculate_pb_points(g))
+
 
 class SnapshotPanel(ui.LayoutView):
- def __init__(self,raid_leaders=None,recent=None,points=None):
+ def __init__(self,raid_leaders=None,recent=None):
   super().__init__(timeout=None)
   raid_leaders=raid_leaders or {}
   recent=recent or []
-  points=points or []
-
-  points_panel=ui.Container(accent_colour=GOLD)
-  points_lines=[
-   "## TOP 10 · PB POINTS",
-   "-# 1st = 5 pts · 2nd = 3 pts · 3rd = 1 pt",
-  ]
-
-  if not points:
-   points_lines.append("-# No approved PB points yet.")
-  else:
-   for index,entry in enumerate(points,1):
-    points_lines.append(
-     f"**{index}.** <@{entry['member_id']}> · "
-     f"**{entry['points']} pts** "
-     f"-# ({entry['firsts']} first · {entry['seconds']} second · {entry['thirds']} third)"
-    )
-
-  points_panel.add_item(
-   ui.TextDisplay("\n".join(points_lines))
-  )
 
   records=ui.Container(accent_colour=BLUE)
   snapshot=["### RAID SNAPSHOT"]
@@ -414,7 +474,6 @@ class SnapshotPanel(ui.LayoutView):
     if idx!=len(recent)-1:
      recent_panel.add_item(ui.Separator())
 
-  self.add_item(points_panel)
   self.add_item(records)
   self.add_item(recent_panel)
 
@@ -424,63 +483,9 @@ class SnapshotPanel(ui.LayoutView):
    activity:await store.raid_top3(g,activity)
    for activity in RAIDS
   }
-
-  rows=await store.approved_for_points(g)
-  placement_points=(5,3,1)
-  grouped={}
-  scores={}
-
-  for r in rows:
-   key=(
-    r["category"],
-    r["activity"],
-    r["variant"]
-   )
-   grouped.setdefault(key,[]).append(r)
-
-  for results in grouped.values():
-   for rank,r in enumerate(results[:3]):
-    raw_ids=r["member_ids"] or ""
-    member_ids={
-     int(value.strip())
-     for value in raw_ids.split(",")
-     if value.strip().isdigit()
-    }
-
-    for member_id in member_ids:
-     entry=scores.setdefault(
-      member_id,
-      {
-       "member_id":member_id,
-       "points":0,
-       "firsts":0,
-       "seconds":0,
-       "thirds":0,
-      }
-     )
-     entry["points"]+=placement_points[rank]
-     if rank==0:
-      entry["firsts"]+=1
-     elif rank==1:
-      entry["seconds"]+=1
-     else:
-      entry["thirds"]+=1
-
-  points=sorted(
-   scores.values(),
-   key=lambda entry:(
-    -entry["points"],
-    -entry["firsts"],
-    -entry["seconds"],
-    -entry["thirds"],
-    entry["member_id"],
-   )
-  )[:10]
-
   return cls(
    leaders,
-   await store.recent_approved(g,3),
-   points
+   await store.recent_approved(g,3)
   )
 
 
@@ -989,6 +994,18 @@ class Review(ui.LayoutView):
 
 
 async def refresh_panel(g,activity=None):
+ home=await store.panel(g)
+ if home:
+  try:
+   ch=bot.get_channel(home["channel"]) or await bot.fetch_channel(home["channel"])
+   msg=await ch.fetch_message(home["message"])
+   await msg.edit(
+    view=await Home.make(g),
+    allowed_mentions=discord.AllowedMentions.none()
+   )
+  except discord.HTTPException:
+   logging.exception("Unable to refresh PB points panel")
+
  r=await store.snapshot_panel(g)
  if r:
   try:
@@ -1463,7 +1480,7 @@ async def pbpanel(i:discord.Interaction):
  await store.clear_boss_boards(i.guild_id)
 
  try:
-  panel_msg=await i.channel.send(view=Home())
+  panel_msg=await i.channel.send(view=await Home.make(i.guild_id))
 
   # Post a temporary directory first so it stays above the leaderboards.
   boss_msg=await i.channel.send(view=BossDirectory())
