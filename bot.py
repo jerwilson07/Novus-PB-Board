@@ -48,17 +48,19 @@ BOSSES={
  "Maggot King":["Standard"],
  "Phantom Muspah":["Standard"],
  "Phosani's Nightmare":["Standard"],
- "Royal Titans":["Standard"],
+ "Royal Titans":["Solo","Duo"],
  "Vorkath":["Standard"],
- "Yama":["Standard"],
+ "Yama":["Solo","Duo"],
  "Zulrah":["Standard"],
  "Duke Sucellus":["Normal","Awakened"],
  "The Leviathan":["Normal","Awakened"],
  "Vardorvis":["Normal","Awakened"],
  "The Whisperer":["Normal","Awakened"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
-NON_SOLO_BOSSES={"Yama","Royal Titans"}
-SOLO_BOSSES=set(BOSSES)-NON_SOLO_BOSSES
+SOLO_DUO_BOSSES={"Yama","Royal Titans"}
+
+def solo_boss_variant(activity,variant):
+ return activity not in SOLO_DUO_BOSSES or variant=="Solo"
 MEDALS=["🥇","🥈","🥉","4.","5."]
 PB_EARLIEST_DATE=datetime(2026,11,7).date()
 
@@ -134,7 +136,9 @@ def proof_looks_like_media(url):
  except ValueError:
   return False
 def team_size(cat,variant):
- if cat=="Bosses" or "Solo" in variant:return 1
+ if cat=="Bosses":
+  return 2 if variant=="Duo" else 1
+ if "Solo" in variant:return 1
  if "Duo" in variant:return 2
  if "Trio" in variant:return 3
  m=re.search(r"(\d+)-Man",variant);return int(m.group(1)) if m else None
@@ -252,7 +256,7 @@ class Store:
  async def ranking(self,g,cat,a,v):
   rows=await self.all("""SELECT * FROM submissions WHERE guild=? AND category=? AND activity=? AND variant=?
   AND status='approved' ORDER BY ms,id""",(g,cat,a,v))
-  if cat=="Bosses" and a in SOLO_BOSSES:
+  if cat=="Bosses" and solo_boss_variant(a,v):
    return unique_solo_results(rows,5)
   return rows[:5]
  async def best_approved(self,g,cat,activity,variant):
@@ -312,8 +316,8 @@ async def calculate_pb_points(g):
   grouped.setdefault(key,[]).append(r)
 
  for key,results in grouped.items():
-  category,activity,_variant=key
-  if category=="Bosses" and activity in SOLO_BOSSES:
+  category,activity,variant=key
+  if category=="Bosses" and solo_boss_variant(activity,variant):
    results=unique_solo_results(results,5)
 
   for rank,r in enumerate(results[:3]):
