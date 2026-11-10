@@ -810,6 +810,66 @@ async def decide(i,sid,choice):
    await user.send(f"Your Novus PB #{sid} needs proof. Use /pbproof with submission_id {sid} in the Novus server.")
   except discord.HTTPException:logging.warning("Unable to DM submission owner")
 
+class ProofUploadModal(ui.Modal,title="NOVUS | PB Proof"):
+ def __init__(self,sid):
+  super().__init__(timeout=300)
+  self.sid=sid
+  self.proof_upload=ui.FileUpload(
+   custom_id="pb:proof:upload",
+   required=True,
+   min_values=1,
+   max_values=1
+  )
+  self.add_item(ui.Label(
+   text="Proof",
+   description="Upload a screenshot or video clip of the PB.",
+   component=self.proof_upload
+  ))
+
+ async def on_submit(self,i):
+  r=await store.one(
+   "SELECT * FROM submissions WHERE id=? AND guild=?",
+   (self.sid,i.guild_id)
+  )
+  if not r or (r["submitter"]!=i.user.id and not is_staff(i)):
+   return await i.response.send_message("PB not found or not yours.",ephemeral=True)
+  if r["status"] not in ("pending","awaiting_proof"):
+   return await i.response.send_message("PB is already resolved.",ephemeral=True)
+
+  attachment=self.proof_upload.values[0]
+  if not (attachment.content_type or "").startswith(("image/","video/")):
+   return await i.response.send_message("Only image/video files accepted.",ephemeral=True)
+
+  proof=attachment.url
+  if not valid_url(proof):
+   return await i.response.send_message("Discord did not return a valid proof attachment URL.",ephemeral=True)
+
+  await i.response.defer(ephemeral=True)
+  if not await store.change(self.sid,r["status"],"pending",proof=proof):
+   return await i.followup.send("Submission changed; retry.",ephemeral=True)
+  updated=await store.one("SELECT * FROM submissions WHERE id=?",(self.sid,))
+  await update_review(updated)
+  await i.followup.send(
+   f"Proof saved for PB #{self.sid}. Staff can review it now.",
+   ephemeral=True
+  )
+
+
+class ProofUploadView(ui.View):
+ def __init__(self,sid):
+  super().__init__(timeout=900)
+  self.sid=sid
+  attach=ui.Button(
+   label="Attach Proof",
+   style=discord.ButtonStyle.primary,
+   custom_id=f"pb:proof:button:{sid}"
+  )
+  async def attach_clicked(i):
+   await i.response.send_modal(ProofUploadModal(self.sid))
+  attach.callback=attach_clicked
+  self.add_item(attach)
+
+
 async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
  try:ms=parse_ms(t)
  except ValueError as e:return await i.response.send_message(str(e),ephemeral=True)
@@ -867,8 +927,9 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
   f"PB #{sid} submitted for staff review for **{normalized_date}**. "
   "The PB must have been achieved after you joined Novus; for group PBs, every listed player "
   "must also have been a Novus member on that date. "
-  + ("Proof received." if proof else "Add proof with /pbproof."),
-  ephemeral=True
+  + ("Proof received." if proof else "Attach proof below, or use /pbproof later."),
+  ephemeral=True,
+  view=None if proof else ProofUploadView(sid)
  )
 
 def submission_target_options():
@@ -912,7 +973,7 @@ def submission_format_options():
 
 def boss_submission_options():
  return [
-  discord.SelectOption(label="Select boss if needed",value="__none__"),
+  discord.SelectOption(label="Select if Raid PB",value="__none__"),
   *[
    discord.SelectOption(label=activity,value=activity)
    for activity in BOSSES
