@@ -324,15 +324,6 @@ class Home(ui.LayoutView):
   ))
   hero.add_item(ui.Separator())
 
-  raid_lines=["### Raids"]
-  for activity in RAIDS:
-   raid_lines.append(
-    f"**{RAID_LABELS[activity]}**"
-   )
-  hero.add_item(
-   ui.TextDisplay("\n".join(raid_lines))
-  )
-
   actions=ui.ActionRow()
   submit=ui.Button(
    label="Submit PB",
@@ -416,6 +407,17 @@ class BossDirectory(ui.LayoutView):
   jump_links=jump_links or {}
 
   panel=ui.Container(accent_colour=BLUE)
+
+  raid_lines=["## Raids"]
+  for activity in RAIDS:
+   raid_lines.append(
+    f"**{RAID_LABELS[activity]}**"
+   )
+  panel.add_item(
+   ui.TextDisplay("\n".join(raid_lines))
+  )
+
+  panel.add_item(ui.Separator())
   panel.add_item(ui.TextDisplay(
    "## Bosses\n"
    "-# Select a boss to jump to its Top 5 leaderboard."
