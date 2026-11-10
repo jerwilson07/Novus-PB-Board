@@ -590,7 +590,7 @@ class BossLeaderboard(ui.LayoutView):
      )
     else:
      lines.append(
-      f"{medal} No record · Vacant"
+      f"{medal} Empty"
      )
 
    panel.add_item(
@@ -647,7 +647,7 @@ class RaidLeaderboard(ui.LayoutView):
      )
     else:
      lines.append(
-      f"{medal} No record · Vacant"
+      f"{medal} Empty"
      )
 
    panel.add_item(
