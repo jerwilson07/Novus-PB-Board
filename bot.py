@@ -407,26 +407,35 @@ class BossDirectory(ui.LayoutView):
   jump_links=jump_links or {}
 
   panel=ui.Container(accent_colour=BLUE)
-
-  raid_lines=["## Raids"]
-  for activity in RAIDS:
-   raid_lines.append(
-    f"**{RAID_LABELS[activity]}**"
-   )
-  panel.add_item(
-   ui.TextDisplay("\n".join(raid_lines))
-  )
-
-  panel.add_item(ui.Separator())
   panel.add_item(ui.TextDisplay(
-   "## Bosses\n"
-   "-# Select a boss to jump to its Top 5 leaderboard."
+   "## PB Directory\n"
+   "-# Select an activity to jump to its leaderboard."
   ))
 
-  groups=[
-   ("Minigames",[
-    "Inferno","Fortis Colosseum","Fight Caves"
-   ]),
+  lines=[
+   "### Minigames",
+  ]
+
+  for name in ("Inferno","Fortis Colosseum","Fight Caves"):
+   url=jump_links.get(name)
+   lines.append(
+    f"[{name}]({url})"
+    if url
+    else f"**{name}**"
+   )
+
+  lines.append("")
+  lines.append("### Raids")
+  for activity in RAIDS:
+   label=RAID_LABELS[activity]
+   url=jump_links.get(activity)
+   lines.append(
+    f"[{label}]({url})"
+    if url
+    else f"**{label}**"
+   )
+
+  remaining_groups=[
    ("Slayer Bosses",[
     "Alchemical Hydra","Araxxor","Grotesque Guardians"
    ]),
@@ -440,10 +449,8 @@ class BossDirectory(ui.LayoutView):
    ])
   ]
 
-  lines=[]
-  for heading,names in groups:
-   if lines:
-    lines.append("")
+  for heading,names in remaining_groups:
+   lines.append("")
    lines.append(f"### {heading}")
    for name in names:
     url=jump_links.get(name)
@@ -514,6 +521,63 @@ class BossLeaderboard(ui.LayoutView):
      )
     )
     for variant in BOSSES[activity]
+   ]
+  )
+
+
+class RaidLeaderboard(ui.LayoutView):
+ def __init__(self,activity,blocks):
+  super().__init__(timeout=None)
+
+  panel=ui.Container(accent_colour=GOLD)
+  panel.add_item(ui.TextDisplay(
+   f"## {RAID_LABELS[activity]} · {clean(activity)}"
+  ))
+
+  for block_index,(variant,results) in enumerate(blocks):
+   if block_index:
+    panel.add_item(ui.Separator())
+
+   lines=[f"### {clean(variant)}"]
+
+   for rank in range(4):
+    medal=MEDALS[rank]
+    if rank < len(results):
+     r=results[rank]
+     proof=(
+      f" · [Proof]({r['proof']})"
+      if r["proof"] and valid_url(r["proof"])
+      else ""
+     )
+     lines.append(
+      f"{medal} **{fmt(r['ms'])}**{proof} · {public_members(r)}"
+     )
+    else:
+     lines.append(
+      f"{medal} No record · Vacant"
+     )
+
+   panel.add_item(
+    ui.TextDisplay("\n".join(lines))
+   )
+
+  self.add_item(panel)
+
+ @classmethod
+ async def make(cls,g,activity):
+  return cls(
+   activity,
+   [
+    (
+     variant,
+     await store.ranking(
+      g,
+      "Raids",
+      activity,
+      variant
+     )
+    )
+    for variant in RAIDS[activity]
    ]
   )
 
@@ -854,27 +918,36 @@ async def refresh_panel(g,activity=None):
   except discord.HTTPException:
    logging.exception("Unable to refresh public panel")
 
- activities=(
-  [activity]
-  if activity in BOSSES
-  else list(BOSSES)
- )
+ if activity in BOSSES:
+  public_activities=[("Bosses",activity)]
+ elif activity in RAIDS:
+  public_activities=[("Raids",activity)]
+ else:
+  public_activities=(
+   [("Bosses",name) for name in BOSSES]
+   + [("Raids",name) for name in RAIDS]
+  )
 
- for boss_name in activities:
-  tracked=await store.boss_board(g,boss_name)
+ for category,name in public_activities:
+  tracked=await store.boss_board(g,name)
   if not tracked:
    continue
   try:
    ch=bot.get_channel(tracked["channel"]) or await bot.fetch_channel(tracked["channel"])
    msg=await ch.fetch_message(tracked["message"])
+   view=(
+    await BossLeaderboard.make(g,name)
+    if category=="Bosses"
+    else await RaidLeaderboard.make(g,name)
+   )
    await msg.edit(
-    view=await BossLeaderboard.make(g,boss_name),
+    view=view,
     allowed_mentions=discord.AllowedMentions.none()
    )
   except discord.HTTPException:
    logging.exception(
-    "Unable to refresh boss PB board for %s",
-    boss_name
+    "Unable to refresh public PB board for %s",
+    name
    )
 
 
@@ -1313,7 +1386,45 @@ async def pbpanel(i:discord.Interaction):
   boss_msg=await i.channel.send(view=BossDirectory())
 
   jump_links={}
+
+  # Minigames first.
+  for activity in ("Inferno","Fortis Colosseum","Fight Caves"):
+   board_msg=await i.channel.send(
+    view=await BossLeaderboard.make(
+     i.guild_id,
+     activity
+    ),
+    allowed_mentions=discord.AllowedMentions.none()
+   )
+   await store.set_boss_board(
+    i.guild_id,
+    activity,
+    i.channel_id,
+    board_msg.id
+   )
+   jump_links[activity]=board_msg.jump_url
+
+  # Then the four raid boards, each showing Top 1-4 per format.
+  for activity in RAIDS:
+   board_msg=await i.channel.send(
+    view=await RaidLeaderboard.make(
+     i.guild_id,
+     activity
+    ),
+    allowed_mentions=discord.AllowedMentions.none()
+   )
+   await store.set_boss_board(
+    i.guild_id,
+    activity,
+    i.channel_id,
+    board_msg.id
+   )
+   jump_links[activity]=board_msg.jump_url
+
+  # Then the remaining bosses beginning with Alchemical Hydra.
   for activity in BOSSES:
+   if activity in ("Inferno","Fortis Colosseum","Fight Caves"):
+    continue
    board_msg=await i.channel.send(
     view=await BossLeaderboard.make(
      i.guild_id,
@@ -1346,7 +1457,7 @@ async def pbpanel(i:discord.Interaction):
    await store.conn.execute("DELETE FROM panel_banners WHERE guild=?",(i.guild_id,))
    await store.conn.commit()
   await i.followup.send(
-   "Refreshed the Novus PB board with jump-linked boss Top 5 leaderboards.",
+   "Refreshed the Novus PB board with jump-linked raid and boss leaderboards.",
    ephemeral=True
   )
  except discord.Forbidden:
