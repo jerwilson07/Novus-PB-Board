@@ -409,43 +409,42 @@ class BossDirectory(ui.LayoutView):
    ])
   ]
 
-  lines=[]
-  for heading,names in groups:
-   if lines:
-    lines.append("")
-   lines.append(f"### {heading}")
-   lines.extend(f"**{name}**" for name in names)
-
-  panel.add_item(
-   ui.TextDisplay("\n".join(lines))
-  )
-
   boss_names=list(BOSSES)
-  boss_select=ui.Select(
-   placeholder="Select a boss to view Top 5 PBs",
-   min_values=1,
-   max_values=1,
-   options=[
-    discord.SelectOption(
-     label=name,
-     value=str(index)
-    )
-    for index,name in enumerate(boss_names)
-   ],
-   custom_id="pb:bossdir:select"
-  )
 
-  async def open_boss(i):
-   target=int(boss_select.values[0])
-   await i.response.send_message(
-    view=await Browser.make(i.guild_id,"Bosses",target),
-    ephemeral=True
-   )
+  for group_index,(heading,names) in enumerate(groups):
+   if group_index:
+    panel.add_item(ui.Separator())
 
-  boss_select.callback=open_boss
-  boss_row=ui.ActionRow()
-  boss_row.add_item(boss_select)
-  panel.add_item(boss_row)
+   panel.add_item(ui.TextDisplay(
+    f"### {heading}"
+   ))
+
+   for row_start in range(0,len(names),3):
+    row=ui.ActionRow()
+
+    for name in names[row_start:row_start+3]:
+     idx=boss_names.index(name)
+
+     button=ui.Button(
+      label=name,
+      style=discord.ButtonStyle.secondary,
+      custom_id=f"pb:bossdir:{idx}"
+     )
+
+     async def open_boss(i,target=idx):
+      await i.response.send_message(
+       view=await Browser.make(
+        i.guild_id,
+        "Bosses",
+        target
+       ),
+       ephemeral=True
+      )
+
+     button.callback=open_boss
+     row.add_item(button)
+
+    panel.add_item(row)
 
   self.add_item(panel)
 
