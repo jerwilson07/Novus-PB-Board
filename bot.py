@@ -297,22 +297,14 @@ class Home(ui.LayoutView):
   ))
   hero.add_item(ui.Separator())
 
-  hero.add_item(ui.TextDisplay("**RAIDS**"))
-  raid_row=ui.ActionRow()
-  for raid_index,activity in enumerate(RAIDS):
-   raid_button=ui.Button(
-    label=RAID_LABELS[activity],
-    style=discord.ButtonStyle.primary,
-    custom_id=f"pb:home:raid:{raid_index}"
+  raid_lines=["### Raids"]
+  for activity in RAIDS:
+   raid_lines.append(
+    f"**{RAID_LABELS[activity]}**"
    )
-   async def open_raid(i,idx=raid_index):
-    await i.response.send_message(
-     view=await RaidBrowser.make(i.guild_id,idx,0),
-     ephemeral=True
-    )
-   raid_button.callback=open_raid
-   raid_row.add_item(raid_button)
-  hero.add_item(raid_row)
+  hero.add_item(
+   ui.TextDisplay("\n".join(raid_lines))
+  )
 
   actions=ui.ActionRow()
   submit=ui.Button(
@@ -397,51 +389,36 @@ class BossDirectory(ui.LayoutView):
 
   panel=ui.Container(accent_colour=BLUE)
   panel.add_item(ui.TextDisplay(
-   "## BOSSES\n"
-   "-# SELECT A CATEGORY"
+   "## Bosses"
   ))
 
   groups=[
-   ("MINIGAMES",[
+   ("Minigames",[
     "Inferno","Fortis Colosseum","Fight Caves"
    ]),
-   ("SLAYER BOSSES",[
+   ("Slayer Bosses",[
     "Alchemical Hydra","Araxxor","Grotesque Guardians"
    ]),
-   ("SOLO & DUO BOSSES",[
+   ("Solo & Duo Bosses",[
     "Gauntlet","Corrupted Gauntlet","Doom of Mokhaiotl","Demonic Brutus",
     "Mad Angel","Maggot King","Phantom Muspah","Phosani's Nightmare",
     "Royal Titans","Vorkath","Yama","Zulrah"
    ]),
-   ("DT2 BOSSES",[
+   ("DT2 Bosses",[
     "Duke Sucellus","The Leviathan","Vardorvis","The Whisperer"
    ])
   ]
 
-  boss_names=list(BOSSES)
-  for group_index,(heading,names) in enumerate(groups):
-   panel.add_item(ui.TextDisplay(
-    ("\n" if group_index else "") + f"**{heading}**"
-   ))
+  lines=[]
+  for heading,names in groups:
+   if lines:
+    lines.append("")
+   lines.append(f"### {heading}")
+   lines.extend(f"**{name}**" for name in names)
 
-   row_size=2 if heading in ("SOLO & DUO BOSSES","DT2 BOSSES") else 3
-   for row_start in range(0,len(names),row_size):
-    row=ui.ActionRow()
-    for name in names[row_start:row_start+row_size]:
-     idx=boss_names.index(name)
-     button=ui.Button(
-      label=name,
-      style=discord.ButtonStyle.secondary,
-      custom_id=f"pb:bossdir:{idx}"
-     )
-     async def open_boss(i,target=idx):
-      await i.response.send_message(
-       view=await Browser.make(i.guild_id,"Bosses",target),
-       ephemeral=True
-      )
-     button.callback=open_boss
-     row.add_item(button)
-    panel.add_item(row)
+  panel.add_item(
+   ui.TextDisplay("\n".join(lines))
+  )
 
   self.add_item(panel)
 
