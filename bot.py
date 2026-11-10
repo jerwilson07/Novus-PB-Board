@@ -48,19 +48,19 @@ BOSSES={
  "Maggot King":["Standard"],
  "Phantom Muspah":["Standard"],
  "Phosani's Nightmare":["Standard"],
- "Royal Titans":["Solo","Duo"],
+ "Royal Titans":["Standard"],
  "Vorkath":["Standard"],
- "Yama":["Solo","Duo"],
+ "Yama":["Standard"],
  "Zulrah":["Standard"],
  "Duke Sucellus":["Normal","Awakened"],
  "The Leviathan":["Normal","Awakened"],
  "Vardorvis":["Normal","Awakened"],
  "The Whisperer":["Normal","Awakened"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
-SOLO_DUO_BOSSES={"Yama","Royal Titans"}
+NON_SOLO_BOSSES={"Yama","Royal Titans"}
 
 def solo_boss_variant(activity,variant):
- return activity not in SOLO_DUO_BOSSES or variant=="Solo"
+ return activity not in NON_SOLO_BOSSES
 MEDALS=["🥇","🥈","🥉","4.","5."]
 PB_EARLIEST_DATE=datetime(2026,11,7).date()
 
@@ -135,9 +135,9 @@ def proof_looks_like_media(url):
   return path.endswith((".png",".jpg",".jpeg",".gif",".webp",".mp4",".mov",".webm"))
  except ValueError:
   return False
-def team_size(cat,variant):
+def team_size(cat,variant,activity=None):
  if cat=="Bosses":
-  return 2 if variant=="Duo" else 1
+  return None if activity in NON_SOLO_BOSSES else 1
  if "Solo" in variant:return 1
  if "Duo" in variant:return 2
  if "Trio" in variant:return 3
@@ -1202,9 +1202,11 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
   )
  normalized_date=parsed_date.isoformat()
 
- required=team_size(cat,variant)
+ required=team_size(cat,variant,act)
  if not members:
   return await i.response.send_message("Select at least one party member.",ephemeral=True)
+ if cat=="Bosses" and act in NON_SOLO_BOSSES and len(members) not in (1,2):
+  return await i.response.send_message("Expected 1 or 2 Discord member(s) for this boss.",ephemeral=True)
  if required is not None and len(members)!=required:
   return await i.response.send_message(f"Expected {required} Discord member(s) for this category.",ephemeral=True)
  if len({m.id for m in members})!=len(members):
