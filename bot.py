@@ -626,7 +626,7 @@ class RaidLeaderboard(ui.LayoutView):
 
    lines=[f"### {clean(variant)}"]
 
-   for rank in range(4):
+   for rank in range(5):
     medal=MEDALS[rank]
     if rank < len(results):
      r=results[rank]
