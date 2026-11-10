@@ -57,6 +57,7 @@ BOSSES={
  "Vardorvis":["Normal","Awakened"],
  "The Whisperer":["Normal","Awakened"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
+SOLO_BOSSES=set(BOSSES)-{"Royal Titans"}
 MEDALS=["🥇","🥈","🥉","4.","5."]
 PB_EARLIEST_DATE=datetime(2026,11,7).date()
 
@@ -68,6 +69,21 @@ def public_members(r):
  except (KeyError,IndexError): raw=None
  ids=[x.strip() for x in (raw or "").split(",") if x.strip().isdigit()]
  return " · ".join(f"<@{x}>" for x in ids) if ids else clean(r["members"])
+
+def unique_solo_results(results,limit=5):
+ unique=[]
+ seen=set()
+ for r in results:
+  raw_ids=r["member_ids"] or ""
+  ids=[value.strip() for value in raw_ids.split(",") if value.strip().isdigit()]
+  member_key=ids[0] if ids else clean(r["members"]).casefold()
+  if member_key in seen:
+   continue
+  seen.add(member_key)
+  unique.append(r)
+  if len(unique)>=limit:
+   break
+ return unique
 
 def short_record(r,rank,include_variant=False):
  lines=[f"{MEDALS[rank]} **{fmt(r['ms'])}**"]
@@ -233,8 +249,11 @@ class Store:
    SET channel=excluded.channel,message=excluded.message""",(g,ch,msg))
    await self.conn.commit()
  async def ranking(self,g,cat,a,v):
-  return await self.all("""SELECT * FROM submissions WHERE guild=? AND category=? AND activity=? AND variant=?
-  AND status='approved' ORDER BY ms,id LIMIT 5""",(g,cat,a,v))
+  rows=await self.all("""SELECT * FROM submissions WHERE guild=? AND category=? AND activity=? AND variant=?
+  AND status='approved' ORDER BY ms,id""",(g,cat,a,v))
+  if cat=="Bosses" and a in SOLO_BOSSES:
+   return unique_solo_results(rows,5)
+  return rows[:5]
  async def best_approved(self,g,cat,activity,variant):
   return await self.one(
    """SELECT * FROM submissions
@@ -291,7 +310,11 @@ async def calculate_pb_points(g):
   )
   grouped.setdefault(key,[]).append(r)
 
- for results in grouped.values():
+ for key,results in grouped.items():
+  category,activity,_variant=key
+  if category=="Bosses" and activity in SOLO_BOSSES:
+   results=unique_solo_results(results,5)
+
   for rank,r in enumerate(results[:3]):
    raw_ids=r["member_ids"] or ""
    member_ids={
