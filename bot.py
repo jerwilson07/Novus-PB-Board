@@ -57,7 +57,8 @@ BOSSES={
  "Vardorvis":["Normal","Awakened"],
  "The Whisperer":["Normal","Awakened"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
-SOLO_BOSSES=set(BOSSES)-{"Royal Titans"}
+NON_SOLO_BOSSES={"Yama","Royal Titans"}
+SOLO_BOSSES=set(BOSSES)-NON_SOLO_BOSSES
 MEDALS=["🥇","🥈","🥉","4.","5."]
 PB_EARLIEST_DATE=datetime(2026,11,7).date()
 
