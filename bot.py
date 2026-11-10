@@ -88,6 +88,34 @@ def unique_solo_results(results,limit=5):
    break
  return unique
 
+def unique_team_results(results,limit=5):
+ unique=[]
+ seen=set()
+ for r in results:
+  raw_ids=r["member_ids"] or ""
+  ids=sorted(
+   value.strip()
+   for value in raw_ids.split(",")
+   if value.strip().isdigit()
+  )
+  if ids:
+   team_key=tuple(ids)
+  else:
+   team_key=tuple(
+    sorted(
+     name.strip().casefold()
+     for name in str(r["members"]).split(",")
+     if name.strip()
+    )
+   )
+  if team_key in seen:
+   continue
+  seen.add(team_key)
+  unique.append(r)
+  if len(unique)>=limit:
+   break
+ return unique
+
 def short_record(r,rank,include_variant=False):
  lines=[f"{MEDALS[rank]} **{fmt(r['ms'])}**"]
  if include_variant:
@@ -258,7 +286,7 @@ class Store:
   AND status='approved' ORDER BY ms,id""",(g,cat,a,v))
   if cat=="Bosses" and solo_boss_variant(a,v):
    return unique_solo_results(rows,5)
-  return rows[:5]
+  return unique_team_results(rows,5)
  async def best_approved(self,g,cat,activity,variant):
   return await self.one(
    """SELECT * FROM submissions
@@ -275,9 +303,10 @@ class Store:
   WHERE guild=? AND status='approved'
   ORDER BY category,activity,variant,ms,id""",(g,))
  async def raid_top3(self,g,activity):
-  return await self.all("""SELECT * FROM submissions
+  rows=await self.all("""SELECT * FROM submissions
   WHERE guild=? AND category='Raids' AND activity=? AND status='approved'
-  ORDER BY ms,id LIMIT 3""",(g,activity))
+  ORDER BY ms,id""",(g,activity))
+  return unique_team_results(rows,3)
  async def clear_guild(self,g):
   async with self.lock:
    await self.conn.execute("DELETE FROM submissions WHERE guild=?",(g,))
@@ -319,6 +348,8 @@ async def calculate_pb_points(g):
   category,activity,variant=key
   if category=="Bosses" and solo_boss_variant(activity,variant):
    results=unique_solo_results(results,5)
+  else:
+   results=unique_team_results(results,5)
 
   for rank,r in enumerate(results[:3]):
    raw_ids=r["member_ids"] or ""
