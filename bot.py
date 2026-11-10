@@ -512,7 +512,6 @@ class BossDirectory(ui.LayoutView):
     else f"**{name}**"
    )
 
-  lines.append("")
   lines.append("### Raids")
   for activity in RAIDS:
    label=RAID_LABELS[activity]
@@ -538,7 +537,6 @@ class BossDirectory(ui.LayoutView):
   ]
 
   for heading,names in remaining_groups:
-   lines.append("")
    lines.append(f"### {heading}")
    for name in names:
     url=jump_links.get(name)
