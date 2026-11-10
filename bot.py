@@ -397,7 +397,7 @@ class Home(ui.LayoutView):
     points_lines.append(
      f"**{index}.** <@{entry['member_id']}> · "
      f"**{entry['points']} pts** "
-     f"-# ({entry['firsts']} first · {entry['seconds']} second · {entry['thirds']} third)"
+     f"- ({entry['firsts']} first · {entry['seconds']} second · {entry['thirds']} third)"
     )
 
   hero.add_item(
