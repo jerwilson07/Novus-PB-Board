@@ -239,6 +239,10 @@ class Store:
   return await self.all("""SELECT * FROM submissions
   WHERE guild=? AND status='approved'
   ORDER BY updated DESC,id DESC LIMIT ?""",(g,limit))
+ async def approved_for_points(self,g):
+  return await self.all("""SELECT * FROM submissions
+  WHERE guild=? AND status='approved'
+  ORDER BY category,activity,variant,ms,id""",(g,))
  async def raid_top3(self,g,activity):
   return await self.all("""SELECT * FROM submissions
   WHERE guild=? AND category='Raids' AND activity=? AND status='approved'
@@ -349,10 +353,31 @@ class Home(ui.LayoutView):
 
 
 class SnapshotPanel(ui.LayoutView):
- def __init__(self,raid_leaders=None,recent=None):
+ def __init__(self,raid_leaders=None,recent=None,points=None):
   super().__init__(timeout=None)
   raid_leaders=raid_leaders or {}
   recent=recent or []
+  points=points or []
+
+  points_panel=ui.Container(accent_colour=GOLD)
+  points_lines=[
+   "## TOP 10 · PB POINTS",
+   "-# 1st = 5 pts · 2nd = 3 pts · 3rd = 1 pt",
+  ]
+
+  if not points:
+   points_lines.append("-# No approved PB points yet.")
+  else:
+   for index,entry in enumerate(points,1):
+    points_lines.append(
+     f"**{index}.** <@{entry['member_id']}> · "
+     f"**{entry['points']} pts** "
+     f"-# ({entry['firsts']} first · {entry['seconds']} second · {entry['thirds']} third)"
+    )
+
+  points_panel.add_item(
+   ui.TextDisplay("\n".join(points_lines))
+  )
 
   records=ui.Container(accent_colour=BLUE)
   snapshot=["### RAID SNAPSHOT"]
@@ -389,6 +414,7 @@ class SnapshotPanel(ui.LayoutView):
     if idx!=len(recent)-1:
      recent_panel.add_item(ui.Separator())
 
+  self.add_item(points_panel)
   self.add_item(records)
   self.add_item(recent_panel)
 
@@ -398,7 +424,64 @@ class SnapshotPanel(ui.LayoutView):
    activity:await store.raid_top3(g,activity)
    for activity in RAIDS
   }
-  return cls(leaders,await store.recent_approved(g,3))
+
+  rows=await store.approved_for_points(g)
+  placement_points=(5,3,1)
+  grouped={}
+  scores={}
+
+  for r in rows:
+   key=(
+    r["category"],
+    r["activity"],
+    r["variant"]
+   )
+   grouped.setdefault(key,[]).append(r)
+
+  for results in grouped.values():
+   for rank,r in enumerate(results[:3]):
+    raw_ids=r["member_ids"] or ""
+    member_ids={
+     int(value.strip())
+     for value in raw_ids.split(",")
+     if value.strip().isdigit()
+    }
+
+    for member_id in member_ids:
+     entry=scores.setdefault(
+      member_id,
+      {
+       "member_id":member_id,
+       "points":0,
+       "firsts":0,
+       "seconds":0,
+       "thirds":0,
+      }
+     )
+     entry["points"]+=placement_points[rank]
+     if rank==0:
+      entry["firsts"]+=1
+     elif rank==1:
+      entry["seconds"]+=1
+     else:
+      entry["thirds"]+=1
+
+  points=sorted(
+   scores.values(),
+   key=lambda entry:(
+    -entry["points"],
+    -entry["firsts"],
+    -entry["seconds"],
+    -entry["thirds"],
+    entry["member_id"],
+   )
+  )[:10]
+
+  return cls(
+   leaders,
+   await store.recent_approved(g,3),
+   points
+  )
 
 
 class BossDirectory(ui.LayoutView):
