@@ -199,13 +199,13 @@ def valid_url(v):
 def parse_ms(s):
  raw=s.strip()
  # Under one minute, seconds may be supplied without a 00: prefix.
- if re.fullmatch(r"\\d{1,2}(?:\\.\\d{1,3})?",raw):
+ if re.fullmatch(r"\d{1,2}(?:\.\d{1,3})?",raw):
   parts=["0",raw]
  else:
   parts=raw.split(":")
  if len(parts) not in (2,3) or any(not x.isdecimal() for x in parts[:-1]):
   raise ValueError("Use SS.ss, MM:SS.ss, or HH:MM:SS.ss.")
- if not re.fullmatch(r"\\d{1,2}(?:\\.\\d{1,3})?",parts[-1]):
+ if not re.fullmatch(r"\d{1,2}(?:\.\d{1,3})?",parts[-1]):
   raise ValueError("Invalid seconds.")
  secs,*fraction=parts[-1].split(".")
  seconds=int(secs)
