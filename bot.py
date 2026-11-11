@@ -569,10 +569,11 @@ async def on_ready():
  if not getattr(bot,"_first_card_retrofit_started",False):
   bot._first_card_retrofit_started=True
   asyncio.create_task(retrofit_existing_first_announcements())
- # Reconcile the specifically confirmed Royal Titans duo without reposting.
- if not getattr(bot,"_royal_titans_team_fix_started",False):
-  bot._royal_titans_team_fix_started=True
-  asyncio.create_task(reconcile_royal_titans_submission_35())
+ # Undo the earlier automatic #35 roster change and re-render the staff card.
+ # This update changes display text only for future submissions.
+ if not getattr(bot,"_royal_titans_display_fix_started",False):
+  bot._royal_titans_display_fix_started=True
+  asyncio.create_task(restore_royal_titans_35_and_refresh_card())
  # Retrieve actual emoji IDs, then update existing leaderboard messages in place.
  for guild in bot.guilds:
   await fetch_activity_emojis(guild)
@@ -1142,76 +1143,71 @@ class Browser(ui.LayoutView):
   )
 
 
-def needs_royal_titans_team_correction(r):
- """Only correct the exact incomplete duo submission confirmed by Council."""
- if not r:return False
- members=[v.strip() for v in (r["member_ids"] or "").split(",") if v.strip().isdigit()]
- return (
-  r["id"]==35 and r["category"]=="Bosses"
-  and r["activity"]=="Royal Titans" and r["variant"]=="Standard"
-  and r["pb_date"]=="2026-11-11" and r["ms"]==46800
-  and r["status"] in ("pending","awaiting_proof")
-  and len(members)==1 and str(r["submitter"]) not in members
- )
+def original_royal_titans_team_35(record):
+ """Undo only the exact submitter append performed by our previous deployment."""
+ if not record:
+  return None
+ if not (
+  record["id"]==35 and record["category"]=="Bosses"
+  and record["activity"]=="Royal Titans"
+  and record["variant"]=="Standard"
+  and record["pb_date"]=="2026-11-11"
+  and record["ms"]==46800
+  and record["review_message"]==1570207527088431165
+  and record["status"] in ("pending","awaiting_proof")
+ ):
+  return None
+ ids=[x.strip() for x in (record["member_ids"] or "").split(",") if x.strip().isdigit()]
+ names=(record["members"] or "").rsplit(", ",1)
+ if len(ids)!=2 or len(names)!=2:
+  return None
+ if ids[-1]!=str(record["submitter"]) or ids[0]==ids[-1]:
+  return None
+ return ids[0],names[0]
 
 
-async def reconcile_royal_titans_submission_35():
- """Include the submitting teammate in #35 and update its staff review in place."""
+async def restore_royal_titans_35_and_refresh_card():
+ """Revert the mistaken roster append and edit existing review #35 in place."""
  await asyncio.sleep(3)
  try:
   record=await store.one("SELECT * FROM submissions WHERE id=?",(35,))
-  if not needs_royal_titans_team_correction(record):
-   logging.info("Royal Titans #35: no pending missing-teammate correction")
+  if not record:
    return
   if GUILD_ID and record["guild"]!=GUILD_ID:
-   logging.warning("Royal Titans #35 guild mismatch; skipped")
    return
-  guild=bot.get_guild(record["guild"])
-  if guild is None:
-   logging.warning("Royal Titans #35 guild unavailable; skipped")
-   return
-  submitter_id=int(record["submitter"])
-  member=guild.get_member(submitter_id)
-  if member is None:
-   try:
-    member=await guild.fetch_member(submitter_id)
-   except discord.HTTPException:
-    logging.warning("Could not fetch submitter name for Royal Titans #35")
-  name=member.display_name if member is not None else str(submitter_id)
-  new_ids=f"{record['member_ids']},{submitter_id}"
-  new_names=f"{record['members']}, {name}"
+  original=original_royal_titans_team_35(record)
+  if original is not None:
+   member_id,member_name=original
+   async with store.lock:
+    cursor=await store.conn.execute(
+     """UPDATE submissions SET member_ids=?,members=?
+     WHERE id=? AND guild=? AND status IN ('pending','awaiting_proof')
+     AND member_ids=? AND members=? AND review_message=?""",
+     (member_id,member_name,35,record["guild"],
+      record["member_ids"],record["members"],record["review_message"])
+    )
+    changed=cursor.rowcount
+    await store.conn.commit()
+   logging.info("Reverted prior automated Royal Titans #35 team append: %s",changed)
+  else:
+   logging.info("Royal Titans #35 roster did not match previous automated append")
 
-  async with store.lock:
-   cursor=await store.conn.execute(
-    """UPDATE submissions SET member_ids=?,members=?
-    WHERE id=? AND guild=? AND status IN ('pending','awaiting_proof')
-    AND member_ids=? AND submitter=?
-    AND activity='Royal Titans' AND variant='Standard' AND ms=46800""",
-    (new_ids,new_names,35,record["guild"],record["member_ids"],submitter_id)
-   )
-   changed=cursor.rowcount
-   await store.conn.commit()
-  if changed!=1:
-   logging.info("Royal Titans #35 changed concurrently; no correction applied")
+  current=await store.one("SELECT * FROM submissions WHERE id=?",(35,))
+  if current["status"] not in ("pending","awaiting_proof"):
+   logging.warning("Royal Titans #35 no longer pending; review not rewritten")
    return
-  corrected=await store.one("SELECT * FROM submissions WHERE id=?",(35,))
-  if corrected["review_channel"] and corrected["review_message"]:
-   channel=bot.get_channel(corrected["review_channel"]) or await bot.fetch_channel(corrected["review_channel"])
-   message=await channel.fetch_message(corrected["review_message"])
-   await message.edit(
-    view=await Review.make(corrected),
+  if current["review_channel"] and current["review_message"]:
+   ch=bot.get_channel(current["review_channel"]) or await bot.fetch_channel(current["review_channel"])
+   msg=await ch.fetch_message(current["review_message"])
+   await msg.edit(
+    view=await Review.make(current),
     allowed_mentions=discord.AllowedMentions.none()
    )
-   logging.info(
-    "Corrected Royal Titans #35 to both players and updated existing review message=%s",
-    message.id
-   )
-  else:
-   logging.warning("Royal Titans #35 corrected but no staff review message is tracked")
+   logging.info("Updated Royal Titans #35 review header without changing submitted team")
  except discord.HTTPException:
-  logging.exception("Could not refresh Royal Titans #35 staff card")
+  logging.exception("Unable to refresh Royal Titans #35 review header")
  except Exception:
-  logging.exception("Royal Titans #35 correction failed")
+  logging.exception("Unable to restore Royal Titans #35 roster and display")
 
 
 class Review(ui.LayoutView):
@@ -1239,7 +1235,8 @@ class Review(ui.LayoutView):
     ui.TextDisplay(
      f"## ✦ NOVUS | PB REVIEW\n"
      f"**{clean(r['activity'])}** · {clean(r['variant'])}\n"
-     f"-# Submission #{r['id']} · Submitted by <@{r['submitter']}>"
+     f"-# Submission #{r['id']} · Submitted by <@{r['submitter']}>\n"
+     f"-# Listed players: {review_members(r)}"
     ),
     accessory=status_badge
    )
