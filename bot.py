@@ -12,6 +12,7 @@ logging.basicConfig(level=logging.INFO)
 TOKEN=os.getenv("DISCORD_TOKEN","")
 GUILD_ID=int(os.getenv("GUILD_ID","0"))
 REVIEW_ID=int(os.getenv("REVIEW_CHANNEL_ID","0"))
+GENERAL_CHAT_ID=int(os.getenv("PB_GENERAL_CHAT_CHANNEL_ID","1532817292205883514"))
 DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
 STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.strip().isdigit()}
 GOLD=0xEAC17B
@@ -633,7 +634,7 @@ class SnapshotPanel(ui.LayoutView):
    if results:
     snapshot.extend(short_record(r,k,include_variant=True) for k,r in enumerate(results))
    else:
-    snapshot.append("-# No records yet.")
+    snapshot.append("-# Be the first to claim this record!")
   records.add_item(ui.TextDisplay("\n".join(snapshot)))
 
   recent_panel=ui.Container(accent_colour=BLUE)
@@ -744,8 +745,7 @@ def add_featured_ranking(panel, results):
  # No custom fonts or image cards: everything is native Discord Components V2.
  if not results:
   panel.add_item(ui.TextDisplay(
-   "-# No approved records yet.\n" +
-   "\n".join(f"{medal} Empty" for medal in MEDALS)
+   "-# Be the first to claim this record!"
   ))
   return
 
@@ -1226,6 +1226,66 @@ async def update_review(r):
   await msg.edit(view=await Review.make(r))
  except discord.HTTPException:logging.exception("Unable to update review")
 
+
+def qualifies_for_first_place(new_record, previous_leader, current_ranking):
+ # Only announce a genuinely faster approved record, never a tie or a
+ # position change caused solely by another submission being superseded.
+ if not current_ranking or current_ranking[0]["id"]!=new_record["id"]:
+  return False
+ return previous_leader is None or new_record["ms"]<previous_leader["ms"]
+
+
+def first_place_announcement(r, previous_leader, leaderboard_url=None):
+ title=RAID_LABELS.get(r["activity"],r["activity"])
+ names=public_members(r)
+ if previous_leader is None:
+  comparison="-# First approved PB for this leaderboard."
+ else:
+  improvement=fmt(previous_leader["ms"]-r["ms"])
+  comparison=f"-# Beat the previous #1 by **{improvement}**."
+ lines=[
+  "## 🏆 NEW NOVUS #1",
+  f"**{clean(title)} · {clean(r['variant'])}**",
+  f"## {fmt(r['ms'])}",
+  names,
+  comparison,
+ ]
+ links=[]
+ if r["proof"] and valid_url(r["proof"]):
+  links.append(f"[↗ Proof]({r['proof']})")
+ if leaderboard_url:
+  links.append(f"[View leaderboard]({leaderboard_url})")
+ if links:
+  lines.append(" · ".join(links))
+ return "\n".join(lines)
+
+
+async def announce_first_place(r, previous_leader):
+ # Read the final approved standings, not just the review-card projection.
+ standings=await store.ranking(r["guild"],r["category"],r["activity"],r["variant"])
+ if not qualifies_for_first_place(r,previous_leader,standings):
+  return False
+ if not GENERAL_CHAT_ID or (GUILD_ID and r["guild"]!=GUILD_ID):
+  return False
+ try:
+  channel=bot.get_channel(GENERAL_CHAT_ID) or await bot.fetch_channel(GENERAL_CHAT_ID)
+  if getattr(getattr(channel,"guild",None),"id",None)!=r["guild"]:
+   logging.error("PB general-chat channel does not belong to submission guild")
+   return False
+  board=await store.boss_board(r["guild"],r["activity"])
+  url=(f"https://discord.com/channels/{r['guild']}/{board['channel']}/{board['message']}"
+       if board else None)
+  await channel.send(
+   first_place_announcement(r,previous_leader,url),
+   allowed_mentions=discord.AllowedMentions(users=True,roles=False,everyone=False)
+  )
+  logging.info("Announced new Novus #1 submission %s in general chat",r["id"])
+  return True
+ except (discord.Forbidden,discord.HTTPException):
+  logging.exception("Unable to post new Novus #1 PB %s to general chat",r["id"])
+  return False
+
+
 async def decide(i,sid,choice):
  if not is_staff(i):return await i.response.send_message("Staff only.",ephemeral=True)
  r=await store.one("SELECT * FROM submissions WHERE id=?",(sid,))
@@ -1235,12 +1295,18 @@ async def decide(i,sid,choice):
   return await i.response.send_message("Proof is required. Use Request Proof.",ephemeral=True)
  if choice=="request" and r["status"]=="awaiting_proof":
   return await i.response.send_message("Already awaiting proof.",ephemeral=True)
+ previous_leader=(await store.best_approved(i.guild_id,r["category"],r["activity"],r["variant"])) if choice=="approve" else None
  target={"approve":"approved","deny":"denied","request":"awaiting_proof"}[choice]
  if not await store.change(sid,r["status"],target,i.user.id):
   return await i.response.send_message("Another reviewer updated this record.",ephemeral=True)
  updated=await store.one("SELECT * FROM submissions WHERE id=?",(sid,))
  await i.response.edit_message(view=await Review.make(updated))
- if choice=="approve":await refresh_panel(i.guild_id,updated["activity"])
+ if choice=="approve":
+  await refresh_panel(i.guild_id,updated["activity"])
+  try:
+   await announce_first_place(updated,previous_leader)
+  except Exception:
+   logging.exception("Unexpected failure announcing Novus PB #%s",sid)
  if choice=="request":
   try:
    user=await bot.fetch_user(r["submitter"])
