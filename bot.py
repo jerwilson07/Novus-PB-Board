@@ -1174,7 +1174,7 @@ def royal_titans_35_ready_to_refresh(r):
 async def refresh_royal_titans_35_review_once():
  """Update the existing Royal Titans #35 review, no team DB or rank changes."""
  await asyncio.sleep(5)
- key="royal_titans_35_refresh_review_only_v2"
+ key="royal_titans_35_refresh_review_order_v3"
  try:
   async with store.lock:
    await store.conn.execute(
@@ -1266,11 +1266,6 @@ class Review(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(ui.TextDisplay("-# PB DATE\n" f"**{clean(r['pb_date'] or 'Not recorded')}**"))
   if active:
-   panel.add_item(ui.TextDisplay(
-    "-# CURRENT #1\n" +
-    (f"**{review_members(leader)}** · **{fmt(leader['ms'])}**" if leader else "No approved record yet.")
-   ))
-   panel.add_item(ui.Separator())
    if not leader:
     difference="First record for this leaderboard"
    elif r["ms"]<leader["ms"]:
@@ -1288,6 +1283,11 @@ class Review(ui.LayoutView):
     accessory=ui.Button(label=label,disabled=True,
      style=discord.ButtonStyle.success if placement==1 else discord.ButtonStyle.secondary,
      custom_id=f"pb:placement:{self.sid}")
+   ))
+   panel.add_item(ui.Separator())
+   panel.add_item(ui.TextDisplay(
+    "-# CURRENT #1\n" +
+    (f"**{review_members(leader)}** · **{fmt(leader['ms'])}**" if leader else "No approved record yet.")
    ))
 
   p=r["proof"]
