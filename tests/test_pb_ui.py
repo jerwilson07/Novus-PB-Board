@@ -120,8 +120,8 @@ class PBLayoutTests(unittest.TestCase):
         board = bot.BossLeaderboard(
             "Vorkath", [("Standard", [champion, runner_up])]
         )
-        self.assertEqual(len(board.children), 2)
-        panel = board.children[1]
+        self.assertEqual(len(board.children), 1)
+        panel = board.children[0]
         self.assertTrue(any(isinstance(child, bot.ui.Section)
                             for child in panel.children))
         text = "\\n".join(
@@ -131,6 +131,45 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIn("TOP 5", text)
         self.assertIn("15:25.00", text)
         self.assertIn("Empty", text)
+
+    def test_boss_heading_and_records_share_one_container(self):
+        champion = record(id=50, category="Bosses", activity="Vorkath",
+                          variant="Standard")
+        board = bot.BossLeaderboard("Vorkath", [("Standard", [champion])])
+        self.assertEqual(len(board.children), 1)
+        panel = board.children[0]
+        heading = panel.children[0]
+        self.assertIsInstance(heading, bot.ui.TextDisplay)
+        self.assertIn("Vorkath", heading.content)
+        self.assertTrue(any(isinstance(item, bot.ui.Section)
+                            for item in panel.children))
+        self.assertLessEqual(len(panel.children), 10)
+
+    def test_two_variant_boss_stays_within_discord_component_limit(self):
+        first = record(id=51, category="Bosses", activity="Vardorvis",
+                       variant="Normal")
+        second = record(id=52, category="Bosses", activity="Vardorvis",
+                        variant="Awakened")
+        board = bot.BossLeaderboard(
+            "Vardorvis", [("Normal", [first]), ("Awakened", [second])]
+        )
+        self.assertEqual(len(board.children), 1)
+        self.assertLessEqual(len(board.children[0].children), 10)
+        headings = [item.content for item in board.children[0].children
+                    if isinstance(item, bot.ui.TextDisplay)]
+        self.assertTrue(any("Normal" in item for item in headings))
+        self.assertTrue(any("Awakened" in item for item in headings))
+
+    def test_first_place_always_uses_trophy(self):
+        self.assertEqual(bot.MEDALS[0], "🏆")
+        self.assertNotIn("🥇", bot.short_record(record(), 0))
+        self.assertIn("🏆", bot.short_record(record(), 0))
+        board = bot.BossLeaderboard(
+            "Vorkath", [("Standard", [record(id=53)])]
+        )
+        champion = next(child for child in board.children[0].children
+                        if isinstance(child, bot.ui.Section))
+        self.assertIn("🏆", champion.children[0].content)
 
     def test_raid_variants_have_separate_containers(self):
         modes = bot.RAIDS["Theatre of Blood"]
