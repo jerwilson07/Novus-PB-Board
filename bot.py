@@ -1368,21 +1368,68 @@ def first_place_announcement(r, previous_leader, leaderboard_url=None):
 
 
 class FirstPlaceAnnouncementCard(ui.LayoutView):
- """A native Discord Components V2 record announcement with gold accent."""
+ """Public #1 milestone, styled after the staff review card."""
  def __init__(self,record,previous_leader=None,leaderboard_url=None):
   super().__init__(timeout=900)
   panel=ui.Container(accent_colour=GOLD)
-  panel.add_item(ui.TextDisplay(first_place_announcement(record,previous_leader)))
-  actions=ui.ActionRow()
-  if record["proof"] and valid_url(record["proof"]):
-   actions.add_item(ui.Button(
-    label="View Proof",style=discord.ButtonStyle.link,url=record["proof"]
+
+  badge=ui.Button(
+   label="New #1",
+   style=discord.ButtonStyle.success,
+   disabled=True,
+   custom_id=f"pb:newfirst:badge:{record['id']}"
+  )
+  panel.add_item(ui.Section(
+   ui.TextDisplay(
+    "## 🏆 NEW NOVUS #1\n"
+    f"**{clean(record['activity'])} · {clean(record['variant'])}**\n"
+    f"-# Achieved by {public_members(record)}"
+   ),
+   accessory=badge
+  ))
+  panel.add_item(ui.Separator())
+  panel.add_item(ui.TextDisplay(
+   "-# PB TIME\n"
+   f"## {fmt(record['ms'])}\n"
+   "-# PB DATE\n"
+   f"**{clean(record['pb_date'] or 'Not recorded')}**"
+  ))
+
+  if previous_leader is None:
+   comparison="-# First approved PB for this leaderboard."
+  else:
+   comparison=(
+    f"-# Beat the previous #1 by **{fmt(previous_leader['ms']-record['ms'])}**."
+   )
+  panel.add_item(ui.TextDisplay(comparison))
+
+  proof=record["proof"]
+  if proof and valid_url(proof):
+   panel.add_item(ui.Separator())
+   panel.add_item(ui.TextDisplay(
+    "### Proof\n"
+    f"[Open submitted evidence]({proof})"
    ))
-  if leaderboard_url:
-   actions.add_item(ui.Button(
-    label="View Leaderboard",style=discord.ButtonStyle.link,url=leaderboard_url
+   if proof_looks_like_media(proof):
+    gallery=ui.MediaGallery()
+    gallery.add_item(media=proof,description="Approved Novus #1 PB evidence")
+    panel.add_item(gallery)
+
+  links=ui.ActionRow()
+  if proof and valid_url(proof):
+   links.add_item(ui.Button(
+    label="View Proof",
+    style=discord.ButtonStyle.link,
+    url=proof
    ))
-  if actions.children:panel.add_item(actions)
+  if leaderboard_url and valid_url(leaderboard_url):
+   links.add_item(ui.Button(
+    label="View Leaderboard",
+    style=discord.ButtonStyle.link,
+    url=leaderboard_url
+   ))
+  if links.children:
+   panel.add_item(links)
   self.add_item(panel)
 
 async def announce_first_place(r, previous_leader):
