@@ -210,6 +210,60 @@ class PBLayoutTests(unittest.TestCase):
 
 
 
+
+class NewFirstAnnouncementTests(unittest.TestCase):
+    def test_only_a_new_fastest_approved_record_qualifies(self):
+        leader = record(id=11, ms=885000)
+        contender = record(id=12, ms=872600)
+        tied = record(id=13, ms=885000)
+        slower = record(id=14, ms=900000)
+        self.assertTrue(bot.qualifies_for_first_place(contender, leader, [contender, leader]))
+        self.assertTrue(bot.qualifies_for_first_place(contender, None, [contender]))
+        self.assertFalse(bot.qualifies_for_first_place(tied, leader, [leader, tied]))
+        self.assertFalse(bot.qualifies_for_first_place(slower, leader, [leader, slower]))
+        self.assertFalse(bot.qualifies_for_first_place(contender, leader, [leader, contender]))
+        self.assertFalse(bot.qualifies_for_first_place(contender, leader, []))
+
+    def test_announcement_contains_time_players_proof_and_improvement(self):
+        contender = record(id=12, ms=872600)
+        leader = record(id=11, ms=885000)
+        message = bot.first_place_announcement(
+            contender, leader,
+            "https://discord.com/channels/123/789/456"
+        )
+        self.assertIn("NEW NOVUS #1", message)
+        self.assertIn("TFA", message)
+        self.assertIn("Trio", message)
+        self.assertIn("14:32.60", message)
+        self.assertIn("<@456>", message)
+        self.assertIn("<@789>", message)
+        self.assertIn("0:12.40", message)
+        self.assertIn("Proof", message)
+        self.assertIn("View leaderboard", message)
+
+    def test_first_ever_record_message_is_clear(self):
+        message = bot.first_place_announcement(record(), None)
+        self.assertIn("First approved PB", message)
+        self.assertNotIn("previous #1 by", message)
+
+    def test_empty_leaderboard_invites_submissions_without_counter(self):
+        board = bot.BossLeaderboard("Vorkath", [("Standard", [])])
+        content = "\n".join(
+            item.content for item in board.children[0].children
+            if isinstance(item, bot.ui.TextDisplay)
+        )
+        self.assertIn("Be the first to claim this record!", content)
+        self.assertNotIn("3/5", content)
+        self.assertNotIn("Empty", content)
+        raid = bot.RaidLeaderboard("The Fractured Archive", [("Solo", [])])
+        self.assertTrue(any(
+            "Be the first to claim this record!" in item.content
+            for panel in raid.children
+            for item in getattr(panel, "children", [])
+            if isinstance(item, bot.ui.TextDisplay)
+        ))
+
+
 class PBStartupRefreshTests(unittest.TestCase):
     def test_refresh_pacing_calls_include_the_target_message(self):
         """Regression: missing message argument breaks the whole on_ready refresh."""
