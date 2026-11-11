@@ -273,6 +273,27 @@ class PBLayoutTests(unittest.TestCase):
         self.assertEqual(other["approved_count"], 0)
         self.assertEqual(other["points"], 0)
 
+    def test_my_pbs_omits_recent_approval_history(self):
+        record_one = record(id=201, member_ids="123", ms=40000,
+                            category="Bosses", activity="Vorkath",
+                            variant="Standard")
+        record_two = record(id=202, member_ids="123", ms=42000,
+                            category="Bosses", activity="Vorkath",
+                            variant="Standard")
+        profile = bot.build_member_profile([record_one, record_two], 123)
+        card = bot.PersonalPBProfile(123, profile)
+        content = "\\n".join(
+            item.content for item in card.children[0].children
+            if isinstance(item, bot.ui.TextDisplay)
+        )
+        self.assertIn("CURRENT TOP 5 PLACEMENTS", content)
+        self.assertIn("approved PB submissions", content)
+        self.assertNotIn("RECENT APPROVED PBs", content)
+        self.assertNotIn("Showing the 8 most recent approvals", content)
+
+        unranked = bot.PersonalPBProfile(999, bot.build_member_profile([record_one], 999))
+        self.assertTrue(unranked)
+
     def test_home_has_my_pbs_button(self):
         home = bot.Home()
         actions = next(x for x in home.children[0].children
