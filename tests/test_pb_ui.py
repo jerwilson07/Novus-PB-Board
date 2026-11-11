@@ -65,6 +65,32 @@ class PBLayoutTests(unittest.TestCase):
             ("11-08-2026", "14:32.60"),
         )
 
+    def test_subminute_pb_times(self):
+        self.assertEqual(bot.parse_ms("30.60"), 30600)
+        self.assertEqual(bot.parse_ms("00:30.60"), 30600)
+        self.assertEqual(bot.parse_ms("14:32.60"), 872600)
+        self.assertEqual(bot.parse_ms("1:02:03.50"), 3723500)
+        self.assertEqual(bot.fmt(bot.parse_ms("30.60")), "0:30.60")
+        for value in ("60.00", "00:60.00", "-5.00", "0.00"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                bot.parse_ms(value)
+
+    def test_both_pb_date_separators(self):
+        for date_value in ("11/08/2026", "11-08-2026"):
+            with self.subTest(date_value=date_value):
+                self.assertEqual(
+                    bot.parse_submission_details(f"30.60 | {date_value}"),
+                    (date_value, "30.60"),
+                )
+                parsed = None
+                for date_format in ("%m-%d-%Y", "%Y-%m-%d", "%m/%d/%Y"):
+                    try:
+                        parsed = bot.datetime.strptime(date_value, date_format).date()
+                        break
+                    except ValueError:
+                        pass
+                self.assertEqual(parsed.isoformat(), "2026-11-08")
+
     def test_pb_cutoff_date_is_enforced(self):
         before = bot.datetime.strptime("2026-11-06", "%Y-%m-%d").date()
         cutoff = bot.datetime.strptime("2026-11-07", "%Y-%m-%d").date()
