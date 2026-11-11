@@ -539,8 +539,9 @@ class Home(ui.LayoutView):
    points_lines.append("-# No approved PB points yet.")
   else:
    for index,entry in enumerate(points,1):
+    rank_display={1:"🏆",2:"🥈",3:"🥉"}.get(index,f"**{index}.**")
     points_lines.append(
-     f"**{index}.** <@{entry['member_id']}> · "
+     f"{rank_display} <@{entry['member_id']}> · "
      f"**{entry['points']} pts** "
      f"- ({entry['firsts']} first · {entry['seconds']} second · {entry['thirds']} third)"
     )
