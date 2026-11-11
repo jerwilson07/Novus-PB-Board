@@ -686,9 +686,9 @@ class BossDirectory(ui.LayoutView):
    for name in names:
     url=jump_links.get(name)
     lines.append(
-     f"[{name}]({url})"
+     f"{activity_icon(name)}[{name}]({url})"
      if url
-     else f"**{name}**"
+     else f"{activity_icon(name)}**{name}**"
     )
 
   panel.add_item(
