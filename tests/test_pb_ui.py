@@ -174,7 +174,7 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIn("🏆", champion.children[0].content)
         self.assertEqual(champion.accessory.label, "NOVUS #1")
         self.assertTrue(champion.accessory.disabled)
-        self.assertEqual(champion.accessory.style, bot.discord.ButtonStyle.secondary)
+        self.assertEqual(champion.accessory.style, bot.discord.ButtonStyle.success)
 
     def test_raid_variants_have_separate_containers(self):
         modes = bot.RAIDS["Theatre of Blood"]
@@ -210,7 +210,7 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIn("Be the first to claim this record!", text)
         self.assertNotIn("Records Claimed", text)
 
-    def test_champion_trophy_date_and_gray_label(self):
+    def test_champion_trophy_date_and_green_label(self):
         board = bot.BossLeaderboard(
             "Vorkath", [("Standard", [record(pb_date="2026-11-08")])]
         )
@@ -220,7 +220,7 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIn("November 8, 2026", section.children[0].content)
         self.assertEqual(section.accessory.label, "NOVUS #1")
         self.assertTrue(section.accessory.disabled)
-        self.assertEqual(section.accessory.style, bot.discord.ButtonStyle.secondary)
+        self.assertEqual(section.accessory.style, bot.discord.ButtonStyle.success)
 
     def test_board_titles_keep_variant_without_redundant_top_five(self):
         record_one = record()
