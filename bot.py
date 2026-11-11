@@ -471,6 +471,17 @@ async def on_ready():
     await message.edit(view=BossDirectory(jump_links),allowed_mentions=discord.AllowedMentions.none())
    except discord.HTTPException:
     logging.exception("Failed to refresh PB directory emojis")
+  # Refresh the existing footer in place so no /pbpanel rerun is needed.
+  footer=await store.footer(guild.id)
+  panel=await store.panel(guild.id)
+  if footer and panel:
+   try:
+    ch=bot.get_channel(footer["channel"]) or await bot.fetch_channel(footer["channel"])
+    message=await ch.fetch_message(footer["message"])
+    url=f"https://discord.com/channels/{guild.id}/{panel['channel']}/{panel['message']}"
+    await message.edit(content=f"## [↑ CLICK TO SCROLL TO THE TOP]({url})",allowed_mentions=discord.AllowedMentions.none())
+   except discord.HTTPException:
+    logging.exception("Failed to refresh PB scroll-to-top footer")
   for record in records:
    activity=record["activity"]
    if activity not in BOSSES and activity not in RAIDS:continue
@@ -1747,7 +1758,7 @@ async def pbpanel(i:discord.Interaction):
    allowed_mentions=discord.AllowedMentions.none()
   )
   footer_msg=await i.channel.send(
-   f"**[↑ Click to scroll to the top]({panel_msg.jump_url})**",
+   f"## [↑ CLICK TO SCROLL TO THE TOP]({panel_msg.jump_url})",
    allowed_mentions=discord.AllowedMentions.none()
   )
 
