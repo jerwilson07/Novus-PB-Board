@@ -1802,38 +1802,98 @@ async def pbclear(i:discord.Interaction):
   ephemeral=True
  )
 
-@bot.tree.command(name="checkemojis",description="Staff-only audit of Novus PB board emoji mappings")
+async def post_current_pb_board(channel,guild_id):
+ """Post a public point-in-time board copy without replacing tracked panels.
+
+ This command deliberately does not call store.set_* or clear_boss_boards.
+ The persistent /pbpanel remains the source of truth for future edits.
+ """
+ sent=[]
+ no_pings=discord.AllowedMentions.none()
+ activities=(
+  ["Inferno","Fortis Colosseum","Fight Caves"]
+  + list(RAIDS)
+  + [name for name in BOSSES if name not in ("Inferno","Fortis Colosseum","Fight Caves")]
+ )
+ try:
+  main=await channel.send(view=await Home.make(guild_id),allowed_mentions=no_pings)
+  sent.append(main)
+  directory=await channel.send(view=BossDirectory(),allowed_mentions=no_pings)
+  sent.append(directory)
+
+  links={}
+  for activity in activities:
+   view=(await RaidLeaderboard.make(guild_id,activity)
+         if activity in RAIDS
+         else await BossLeaderboard.make(guild_id,activity))
+   board=await channel.send(view=view,allowed_mentions=no_pings)
+   sent.append(board)
+   links[activity]=board.jump_url
+   # Pace the burst to reduce Discord channel-rate-limit retries.
+   await asyncio.sleep(0.6)
+
+  await directory.edit(view=BossDirectory(links),allowed_mentions=no_pings)
+  snapshot=await channel.send(
+   view=await SnapshotPanel.make(guild_id),allowed_mentions=no_pings
+  )
+  sent.append(snapshot)
+  footer=await channel.send(
+   f"## [↑ CLICK TO SCROLL TO THE TOP]({main.jump_url})",
+   allowed_mentions=no_pings
+  )
+  sent.append(footer)
+  return main, len(sent)
+ except Exception:
+  # A half-posted board can overwhelm a channel. Roll back only the
+  # newly created copy, never the separately tracked PB leaderboard.
+  for message in reversed(sent):
+   try:
+    await message.delete()
+   except discord.HTTPException:
+    logging.warning("Unable to delete partial PB copy message %s",message.id)
+  raise
+
+
+@bot.tree.command(name="pbpost",description="Post a public copy of the current Novus PB board here")
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
-async def checkemojis(i:discord.Interaction):
+async def pbpost(i:discord.Interaction):
  if not is_staff(i):
   return await i.response.send_message("Staff only.",ephemeral=True)
+ if not i.channel or not hasattr(i.channel,"send"):
+  return await i.response.send_message(
+   "Use this in a text channel where I can post the board.",ephemeral=True
+  )
+ me=i.guild.me
+ perms=i.channel.permissions_for(me) if me else None
+ if not perms or not perms.view_channel or not perms.send_messages or not perms.embed_links:
+  return await i.response.send_message(
+   "Novus PB needs View Channel, Send Messages, and Embed Links here.",
+   ephemeral=True
+  )
  await i.response.defer(ephemeral=True)
- await fetch_activity_emojis(i.guild)
  try:
-  emojis=await i.guild.fetch_emojis()
- except discord.HTTPException:
-  emojis=i.guild.emojis
- by_name={emoji.name.lower():emoji for emoji in emojis}
- found=[]
- missing=[]
- for activity,name in ACTIVITY_EMOJIS.items():
-  if name.lower() in by_name:
-   found.append(activity)
-  else:
-   missing.append(f"{activity}: expected `:{name}:`")
- lines=[
-  f"**Novus PB Emoji Audit** · {len(found)}/{len(ACTIVITY_EMOJIS)} matched",
-  f"Visible server emojis: {len(emojis)}",
-  "**Missing mappings:**",
-  *(missing if missing else ["None"]),
-  "",
-  "**Actual uploaded emoji names:**",
-  ", ".join(sorted(e.name for e in emojis)) or "None",
-  "",
-  "CoX has no supplied icon in the original ZIP."
- ]
- await i.followup.send("\n".join(lines)[:1900],ephemeral=True)
+  await fetch_activity_emojis(i.guild)
+  main,count=await post_current_pb_board(i.channel,i.guild_id)
+  await i.followup.send(
+   f"Posted a public copy of the current Novus PB board ({count} messages): "
+   f"{main.jump_url}\n"
+   "-# This copy captures the standings now. /pbpanel still manages the main live board.",
+   ephemeral=True
+  )
+ except (discord.Forbidden,discord.HTTPException):
+  logging.exception("Could not post PB board copy in channel %s",i.channel_id)
+  await i.followup.send(
+   "Discord could not post the PB board here. Check Novus PB permissions and try again.",
+   ephemeral=True
+  )
+ except Exception:
+  logging.exception("PB board copy failed in channel %s",i.channel_id)
+  await i.followup.send(
+   "Could not post the PB board copy. Check the PB bot logs.",
+   ephemeral=True
+  )
+
 
 @bot.tree.command(name="pbpanel",description="Create or refresh the persistent PB panel in this channel")
 @app_commands.guild_only()
