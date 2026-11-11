@@ -122,7 +122,7 @@ class PBLayoutTests(unittest.TestCase):
         )
         self.assertEqual(len(board.children), 1)
         panel = board.children[0]
-        self.assertTrue(any(isinstance(child, bot.ui.Section)
+        self.assertTrue(any(isinstance(child, bot.ui.TextDisplay) and 'NOVUS #1' in child.content
                             for child in panel.children))
         text = "\\n".join(
             child.content for child in panel.children
@@ -141,7 +141,7 @@ class PBLayoutTests(unittest.TestCase):
         heading = panel.children[0]
         self.assertIsInstance(heading, bot.ui.TextDisplay)
         self.assertIn("Vorkath", heading.content)
-        self.assertTrue(any(isinstance(item, bot.ui.Section)
+        self.assertTrue(any(isinstance(item, bot.ui.TextDisplay) and 'NOVUS #1' in item.content
                             for item in panel.children))
         self.assertLessEqual(len(panel.children), 10)
 
@@ -168,8 +168,8 @@ class PBLayoutTests(unittest.TestCase):
             "Vorkath", [("Standard", [record(id=53)])]
         )
         champion = next(child for child in board.children[0].children
-                        if isinstance(child, bot.ui.Section))
-        self.assertIn("🏆", champion.children[0].content)
+                        if isinstance(child, bot.ui.TextDisplay) and 'NOVUS #1' in child.content)
+        self.assertIn("🏆", champion.content)
 
     def test_raid_variants_have_separate_containers(self):
         modes = bot.RAIDS["Theatre of Blood"]
@@ -189,10 +189,66 @@ class PBLayoutTests(unittest.TestCase):
         raid = bot.RaidBrowser(123, 0, 0, [record(id=72)])
         for view in (boss, raid):
             self.assertTrue(
-                any(isinstance(child, bot.ui.Section)
+                any(isinstance(child, bot.ui.TextDisplay) and 'NOVUS #1' in child.content
                     for panel in view.children
                     for child in getattr(panel, "children", []))
             )
+
+
+    def test_empty_board_prompt_and_no_claimed_counter(self):
+        board = bot.BossLeaderboard("Vorkath", [("Standard", [])])
+        text = "\n".join(
+            part.content for part in board.children[0].children
+            if isinstance(part, bot.ui.TextDisplay)
+        )
+        self.assertIn("Be the first to claim this record!", text)
+        self.assertNotIn("Records Claimed", text)
+
+    def test_champion_trophy_and_date_without_gray_button(self):
+        board = bot.BossLeaderboard(
+            "Vorkath", [("Standard", [record(pb_date="2026-11-08")])]
+        )
+        components = board.children[0].children
+        first = next(x for x in components
+                     if isinstance(x, bot.ui.TextDisplay) and "NOVUS #1" in x.content)
+        self.assertIn("🏆", first.content)
+        self.assertIn("November 8, 2026", first.content)
+        self.assertFalse(any(isinstance(x, bot.ui.Section) for x in components))
+
+    def test_gold_announcement_card_and_date(self):
+        pb = record(id=81, pb_date="2026-11-08", ms=872600)
+        previous = record(id=82, ms=885000)
+        card = bot.FirstPlaceAnnouncementCard(
+            pb, previous, "https://discord.com/channels/1/2/3"
+        )
+        self.assertEqual(len(card.children), 1)
+        self.assertEqual(card.children[0].accent_colour.value, bot.GOLD)
+        text = card.children[0].children[0].content
+        self.assertIn("NEW NOVUS #1", text)
+        self.assertIn("November 8, 2026", text)
+        self.assertIn("0:12.40", text)
+        self.assertIn("14:32.60", text)
+
+    def test_member_profile_uses_team_placements_and_points(self):
+        p1 = record(id=101, member_ids="123,456,789", ms=600000)
+        p2 = record(id=102, member_ids="123,222,333", ms=620000)
+        p3 = record(id=103, member_ids="123", ms=40000,
+                    category="Bosses", activity="Vorkath", variant="Standard")
+        summary = bot.build_member_profile([p1, p2, p3], 123)
+        self.assertEqual(summary["approved_count"], 3)
+        self.assertEqual(summary["firsts"], 2)
+        self.assertEqual(summary["seconds"], 1)
+        self.assertEqual(summary["points"], 13)
+        self.assertTrue(bot.PersonalPBProfile(123, summary))
+        other = bot.build_member_profile([p1, p2, p3], 999)
+        self.assertEqual(other["approved_count"], 0)
+        self.assertEqual(other["points"], 0)
+
+    def test_home_has_my_pbs_button(self):
+        home = bot.Home()
+        actions = next(x for x in home.children[0].children
+                       if isinstance(x, bot.ui.ActionRow))
+        self.assertIn("My PBs", [x.label for x in actions.children])
 
     def test_review_card_with_media_does_not_exceed_container_limit(self):
         review = bot.Review(record())
