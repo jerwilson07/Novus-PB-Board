@@ -876,7 +876,7 @@ def add_featured_ranking(panel, results):
   ui.TextDisplay(champion_text),
   accessory=ui.Button(
    label="NOVUS #1",
-   style=discord.ButtonStyle.secondary,
+   style=discord.ButtonStyle.success,
    disabled=True,
    custom_id=f"pb:leader:first:{champion['id']}"
   )
