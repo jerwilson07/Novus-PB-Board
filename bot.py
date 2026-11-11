@@ -139,9 +139,10 @@ def now(): return datetime.now(timezone.utc).isoformat(timespec="seconds")
 # Server emoji names correspond to the PNG files in the Novus Discord emoji pack.
 # No hardcoded emoji IDs: existing server emojis are resolved at render time.
 ACTIVITY_EMOJIS={
- "The Fractured Archive":"ocellus",
+ "The Fractured Archive":"tfa",
  "Theatre of Blood":"verzik",
  "Tombs of Amascut":"warden",
+ "Chambers of Xeric":"COX",
  "Inferno":"zuk",
  "Fortis Colosseum":"sol_heredit",
  "Fight Caves":"jad",
@@ -166,13 +167,29 @@ ACTIVITY_EMOJIS={
  "The Whisperer":"whisperer",
 }
 
+ACTIVITY_EMOJI_CACHE={}
+
+async def fetch_activity_emojis(guild):
+ try:
+  server_emojis=await guild.fetch_emojis()
+ except discord.HTTPException:
+  logging.warning("Could not fetch server emojis for %s; using cache",guild.id)
+  server_emojis=guild.emojis
+ ACTIVITY_EMOJI_CACHE[guild.id]={
+  emoji.name.casefold():str(emoji) for emoji in server_emojis
+ }
+ return ACTIVITY_EMOJI_CACHE[guild.id]
+
 def activity_icon(activity):
  name=ACTIVITY_EMOJIS.get(activity)
  if not name:return ""
  guild=bot.get_guild(GUILD_ID) if GUILD_ID else (bot.guilds[0] if bot.guilds else None)
  if not guild:return ""
- emoji=discord.utils.get(guild.emojis,name=name)
- return f"{str(emoji)} " if emoji else ""
+ resolved=ACTIVITY_EMOJI_CACHE.get(guild.id,{}).get(name.casefold())
+ if not resolved:
+  emoji=next((e for e in guild.emojis if e.name.casefold()==name.casefold()),None)
+  resolved=str(emoji) if emoji else ""
+ return f"{resolved} " if resolved else ""
 
 def clean(v): return discord.utils.escape_mentions(discord.utils.escape_markdown(str(v)))
 def valid_url(v):
@@ -430,6 +447,30 @@ async def calculate_pb_points(g):
 @bot.event
 async def on_ready():
  logging.info("Novus PB bot ready as %s (%s)",bot.user,bot.user.id)
+ # Retrieve actual emoji IDs, then update existing leaderboard messages in place.
+ for guild in bot.guilds:
+  await fetch_activity_emojis(guild)
+  records=await store.boss_boards(guild.id)
+  jump_links={r["activity"]:f"https://discord.com/channels/{guild.id}/{r['channel']}/{r['message']}" for r in records}
+  directory=await store.boss_panel(guild.id)
+  if directory:
+   try:
+    ch=bot.get_channel(directory["channel"]) or await bot.fetch_channel(directory["channel"])
+    message=await ch.fetch_message(directory["message"])
+    await message.edit(view=BossDirectory(jump_links),allowed_mentions=discord.AllowedMentions.none())
+   except discord.HTTPException:
+    logging.exception("Failed to refresh PB directory emojis")
+  for record in records:
+   activity=record["activity"]
+   if activity not in BOSSES and activity not in RAIDS:continue
+   try:
+    ch=bot.get_channel(record["channel"]) or await bot.fetch_channel(record["channel"])
+    message=await ch.fetch_message(record["message"])
+    view=await (BossLeaderboard.make(guild.id,activity) if activity in BOSSES else RaidLeaderboard.make(guild.id,activity))
+    await message.edit(view=view,allowed_mentions=discord.AllowedMentions.none())
+   except discord.HTTPException:
+    logging.exception("Failed to refresh PB icon for %s",activity)
+
  # Update the tracked message in place after the animated asset deploys.
  # Do not delete/repost the board or alter its other panels.
  if PB_BANNER_URL != PB_BANNER_STATIC:
@@ -1555,6 +1596,7 @@ async def checkemojis(i:discord.Interaction):
  if not is_staff(i):
   return await i.response.send_message("Staff only.",ephemeral=True)
  await i.response.defer(ephemeral=True)
+ await fetch_activity_emojis(i.guild)
  try:
   emojis=await i.guild.fetch_emojis()
  except discord.HTTPException:
@@ -1586,6 +1628,7 @@ async def checkemojis(i:discord.Interaction):
 async def pbpanel(i:discord.Interaction):
  if not is_staff(i):return await i.response.send_message("Staff only.",ephemeral=True)
  await i.response.defer(ephemeral=True)
+ await fetch_activity_emojis(i.guild)
  me=i.guild.me
  perms=i.channel.permissions_for(me) if me else None
  if not perms or not perms.view_channel or not perms.send_messages:
