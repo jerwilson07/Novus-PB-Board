@@ -569,6 +569,10 @@ async def on_ready():
  if not getattr(bot,"_first_card_retrofit_started",False):
   bot._first_card_retrofit_started=True
   asyncio.create_task(retrofit_existing_first_announcements())
+ # Refresh the previously edited Royal Titans review card from its saved team.
+ if not getattr(bot,"_royal_titans_35_review_refresh_started",False):
+  bot._royal_titans_35_review_refresh_started=True
+  asyncio.create_task(refresh_royal_titans_35_review_once())
  # Retrieve actual emoji IDs, then update existing leaderboard messages in place.
  for guild in bot.guilds:
   await fetch_activity_emojis(guild)
@@ -1136,6 +1140,77 @@ class Browser(ui.LayoutView):
     for variant in CATS[cat][activity]
    ]
   )
+
+
+def royal_titans_35_ready_to_refresh(r):
+ """Guard against changing the wrong review card or overwriting a changed PB."""
+ if not r:return False
+ ids=[p.strip() for p in (r["member_ids"] or "").split(",") if p.strip().isdigit()]
+ return (
+  r["id"]==35
+  and r["category"]=="Bosses"
+  and r["activity"]=="Royal Titans"
+  and r["variant"]=="Standard"
+  and r["ms"]==46800
+  and r["pb_date"]=="2026-11-11"
+  and r["status"] in ("pending","awaiting_proof")
+  and r["review_message"]==1570207527088431165
+  and len(ids)==2 and len(set(ids))==2
+  and str(r["submitter"]) in ids
+ )
+
+
+async def refresh_royal_titans_35_review_once():
+ """Update the existing Royal Titans #35 review, no team DB or rank changes."""
+ await asyncio.sleep(5)
+ key="royal_titans_35_refresh_review_only_v2"
+ try:
+  async with store.lock:
+   await store.conn.execute(
+    "CREATE TABLE IF NOT EXISTS one_time_pb_migrations "
+    "(name TEXT PRIMARY KEY,applied TEXT NOT NULL)"
+   )
+   await store.conn.commit()
+  done=await store.one(
+   "SELECT name FROM one_time_pb_migrations WHERE name=?",(key,)
+  )
+  if done:return
+  record=await store.one("SELECT * FROM submissions WHERE id=?",(35,))
+  if not royal_titans_35_ready_to_refresh(record):
+   logging.warning(
+    "Skipped Royal Titans #35 review refresh: team/status differs from expected; "
+    "no data was changed"
+   )
+   return
+  if GUILD_ID and record["guild"]!=GUILD_ID:
+   logging.warning("Skipped Royal Titans #35 review refresh: guild mismatch")
+   return
+  channel=bot.get_channel(record["review_channel"]) or await bot.fetch_channel(
+   record["review_channel"]
+  )
+  message=await channel.fetch_message(record["review_message"])
+  if message.author.id!=bot.user.id:
+   logging.warning("Skipped Royal Titans #35: review message belongs to another user")
+   return
+  await message.edit(
+   view=await Review.make(record),
+   allowed_mentions=discord.AllowedMentions.none()
+  )
+  async with store.lock:
+   await store.conn.execute(
+    "INSERT OR IGNORE INTO one_time_pb_migrations(name,applied) VALUES(?,?)",
+    (key,now())
+   )
+   await store.conn.commit()
+  logging.info(
+   "Royal Titans #35 review updated in place: both stored members in Submitted PB, "
+   "no Listed players header (message=%s)",
+   message.id
+  )
+ except discord.HTTPException:
+  logging.exception("Failed to update Royal Titans #35 existing review message")
+ except Exception:
+  logging.exception("Unexpected Royal Titans #35 review refresh error")
 
 
 class Review(ui.LayoutView):
