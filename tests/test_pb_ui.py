@@ -333,6 +333,38 @@ class PBLayoutTests(unittest.TestCase):
         review = bot.Review(record())
         self.assertLessEqual(len(review.children[0].children), 10)
 
+    def test_royal_titans_review_team_appears_at_submitted_time_not_header(self):
+        submitted = record(
+            id=35, category="Bosses", activity="Royal Titans",
+            variant="Standard", member_ids="707,808", submitter=808,
+            members="07 Ezra, What A Piety", ms=46800,
+            pb_date="2026-11-11", status="pending",
+            review_message=1570207527088431165,
+        )
+        previous = record(
+            id=20, category="Bosses", activity="Royal Titans",
+            variant="Standard", member_ids="999", ms=37200,
+        )
+        card = bot.Review(submitted, previous, placement=2)
+        panel = card.children[0]
+        header = panel.children[0].children[0].content
+        self.assertIn("Submitted by <@808>", header)
+        self.assertNotIn("Listed players", header)
+        submitted_text = next(
+            item.children[0].content for item in panel.children
+            if isinstance(item, bot.ui.Section)
+            and "SUBMITTED PB" in item.children[0].content
+        )
+        self.assertIn("<@707> · <@808>", submitted_text)
+        self.assertIn("0:46.80", submitted_text)
+        self.assertTrue(bot.royal_titans_35_ready_to_refresh(submitted))
+        self.assertFalse(bot.royal_titans_35_ready_to_refresh(
+            dict(submitted, member_ids="707")
+        ))
+        self.assertFalse(bot.royal_titans_35_ready_to_refresh(
+            dict(submitted, status="approved")
+        ))
+
     def test_review_comparison_and_approved_card(self):
         self.assertTrue(bot.Review(record(), record(ms=1000000)))
         self.assertTrue(bot.Review(record(status="approved")))
