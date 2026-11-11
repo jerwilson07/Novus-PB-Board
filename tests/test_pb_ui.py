@@ -222,7 +222,7 @@ class PBLayoutTests(unittest.TestCase):
             pb, previous, "https://discord.com/channels/1/2/3"
         )
         self.assertEqual(len(card.children), 1)
-        self.assertEqual(card.children[0].accent_colour.value, bot.GOLD)
+        self.assertEqual(int(card.children[0].accent_colour), bot.GOLD)
         text = card.children[0].children[0].content
         self.assertIn("NEW NOVUS #1", text)
         self.assertIn("November 8, 2026", text)
@@ -288,7 +288,7 @@ class NewFirstAnnouncementTests(unittest.TestCase):
             "https://discord.com/channels/123/789/456"
         )
         self.assertIn("NEW NOVUS #1", message)
-        self.assertIn("TFA", message)
+        self.assertIn("The Fractured Archive", message)
         self.assertIn("Trio", message)
         self.assertIn("14:32.60", message)
         self.assertIn("<@456>", message)
