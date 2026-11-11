@@ -1802,54 +1802,20 @@ async def pbclear(i:discord.Interaction):
   ephemeral=True
  )
 
-class TopTenPBPost(ui.LayoutView):
- """A single-message public snapshot of current Novus PB points."""
- def __init__(self,points,board_url=None):
-  super().__init__(timeout=None)
-  panel=ui.Container(accent_colour=GOLD)
-  panel.add_item(ui.TextDisplay(
-   "## ✦ NOVUS · PB TOP 10\n"
-   "-# 1st = 5 pts · 2nd = 3 pts · 3rd = 1 pt"
-  ))
-  if points:
-   lines=[]
-   for index,entry in enumerate(points[:10],1):
-    rank={1:"🏆",2:"🥈",3:"🥉"}.get(index,f"**{index}.**")
-    lines.append(
-     f"{rank} <@{entry['member_id']}> · **{entry['points']} pts** "
-     f"({entry['firsts']} first · {entry['seconds']} second · "
-     f"{entry['thirds']} third)"
-    )
-   panel.add_item(ui.TextDisplay("\n".join(lines)))
-  else:
-   panel.add_item(ui.TextDisplay("-# No approved PB points yet."))
-  if board_url and valid_url(board_url):
-   row=ui.ActionRow()
-   row.add_item(ui.Button(
-    label="Full PB Leaderboard",
-    style=discord.ButtonStyle.link,
-    url=board_url
-   ))
-   panel.add_item(row)
-  self.add_item(panel)
-
-
 async def post_current_pb_board(channel,guild_id):
- """Post one public Top 10 snapshot; never modify the persistent PB board."""
- points=await calculate_pb_points(guild_id)
- tracked=await store.panel(guild_id)
- board_url=(
-  f"https://discord.com/channels/{guild_id}/{tracked['channel']}/{tracked['message']}"
-  if tracked else None
- )
+ """Post exactly the same public Home panel shown at the top of #pb-leaderboard.
+
+ Reuse Home.make so banner, points layout, and action buttons remain identical.
+ This is a one-message snapshot and does not alter persistent panel tracking.
+ """
  message=await channel.send(
-  view=TopTenPBPost(points,board_url),
+  view=await Home.make(guild_id),
   allowed_mentions=discord.AllowedMentions.none()
  )
  return message,1
 
 
-@bot.tree.command(name="pbpost",description="Post the current Novus PB Top 10 in this channel")
+@bot.tree.command(name="pbpost",description="Post the Novus PB banner and Top 10 panel in this channel")
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
 async def pbpost(i:discord.Interaction):
