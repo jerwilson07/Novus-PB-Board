@@ -1548,6 +1548,38 @@ async def pbclear(i:discord.Interaction):
   ephemeral=True
  )
 
+@bot.tree.command(name="checkemojis",description="Staff-only audit of Novus PB board emoji mappings")
+@app_commands.guild_only()
+@app_commands.default_permissions(manage_guild=True)
+async def checkemojis(i:discord.Interaction):
+ if not is_staff(i):
+  return await i.response.send_message("Staff only.",ephemeral=True)
+ await i.response.defer(ephemeral=True)
+ try:
+  emojis=await i.guild.fetch_emojis()
+ except discord.HTTPException:
+  emojis=i.guild.emojis
+ by_name={emoji.name.lower():emoji for emoji in emojis}
+ found=[]
+ missing=[]
+ for activity,name in ACTIVITY_EMOJIS.items():
+  if name.lower() in by_name:
+   found.append(activity)
+  else:
+   missing.append(f"{activity}: expected `:{name}:`")
+ lines=[
+  f"**Novus PB Emoji Audit** · {len(found)}/{len(ACTIVITY_EMOJIS)} matched",
+  f"Visible server emojis: {len(emojis)}",
+  "**Missing mappings:**",
+  *(missing if missing else ["None"]),
+  "",
+  "**Actual uploaded emoji names:**",
+  ", ".join(sorted(e.name for e in emojis)) or "None",
+  "",
+  "CoX has no supplied icon in the original ZIP."
+ ]
+ await i.followup.send("\\n".join(lines)[:1900],ephemeral=True)
+
 @bot.tree.command(name="pbpanel",description="Create or refresh the persistent PB panel in this channel")
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
