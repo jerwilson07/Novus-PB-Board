@@ -358,9 +358,17 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIn("<@707> · <@808>", submitted_text)
         self.assertIn("0:46.80", submitted_text)
         self.assertTrue(bot.royal_titans_35_ready_to_refresh(submitted))
-        self.assertFalse(bot.royal_titans_35_ready_to_refresh(
+        self.assertTrue(bot.royal_titans_35_ready_to_refresh(
             dict(submitted, member_ids="707")
         ))
+        self.assertIn(
+            "<@707> · <@808>",
+            bot.submitted_review_members(dict(submitted, member_ids="707"))
+        )
+        self.assertEqual(
+            bot.submitted_review_members(submitted),
+            "<@707> · <@808>",
+        )
         self.assertFalse(bot.royal_titans_35_ready_to_refresh(
             dict(submitted, status="approved")
         ))
