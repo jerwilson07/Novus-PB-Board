@@ -932,7 +932,7 @@ class Browser(ui.LayoutView):
 
 
 class Review(ui.LayoutView):
- def __init__(self,r,leader=None):
+ def __init__(self,r,leader=None,placement=None):
   active=r["status"] in ("pending","awaiting_proof")
   super().__init__(timeout=None if active else 60)
   self.sid=r["id"]
@@ -963,37 +963,32 @@ class Review(ui.LayoutView):
   )
 
   panel.add_item(ui.Separator())
-  panel.add_item(
-   ui.TextDisplay(
-    f"-# PB DATE · TIME\n"
-    f"**{clean(r['pb_date'] or 'Not recorded')}** · **{fmt(r['ms'])}**\n"
-    f"**{review_members(r)}**"
-   )
-  )
-
+  panel.add_item(ui.TextDisplay("-# PB DATE\n" f"**{clean(r['pb_date'] or 'Not recorded')}**"))
   if active:
-   if leader is None:
-    comparison=(
-     "### FIRST CATEGORY RECORD\n"
-     "-# No approved record yet."
-    )
+   panel.add_item(ui.Separator())
+   panel.add_item(ui.TextDisplay(
+    "-# CURRENT #1\n" +
+    (f"**{review_members(leader)}** · **{fmt(leader['ms'])}**" if leader else "No approved record yet.")
+   ))
+   panel.add_item(ui.Separator())
+   if not leader:
+    difference="First record for this leaderboard"
    elif r["ms"]<leader["ms"]:
-    comparison=(
-     "### POTENTIAL NEW #1\n"
-     f"**{fmt(r['ms'])}** · current #1 **{fmt(leader['ms'])}**\n"
-     f"-# Faster by {fmt(leader['ms']-r['ms'])}"
-    )
-   elif r["ms"]==leader["ms"]:
-    comparison=(
-     "### TIES CURRENT #1\n"
-     f"**{fmt(r['ms'])}** · same as current #1"
-    )
+    difference=f"{fmt(leader['ms']-r['ms'])} faster than current #1"
+   elif r["ms"]>leader["ms"]:
+    difference=f"{fmt(r['ms']-leader['ms'])} behind current #1"
    else:
-    comparison=(
-     "### CURRENT #1\n"
-     f"**{fmt(leader['ms'])}** · submitted **{fmt(r['ms'])}**"
-    )
-   panel.add_item(ui.TextDisplay(comparison))
+    difference="Tied with current #1"
+   label=(f"NEW #{placement}" if isinstance(placement,int) else
+          "NO RANK CHANGE" if placement=="unchanged" else "OUTSIDE TOP 5")
+   panel.add_item(ui.Section(
+    ui.TextDisplay("-# SUBMITTED PB\n"
+     f"**{review_members(r)}** · **{fmt(r['ms'])}**\n"
+     f"-# {difference}"),
+    accessory=ui.Button(label=label,disabled=True,
+     style=discord.ButtonStyle.success if placement==1 else discord.ButtonStyle.secondary,
+     custom_id=f"pb:placement:{self.sid}")
+   ))
 
   panel.add_item(ui.Separator())
   p=r["proof"]
@@ -1050,11 +1045,23 @@ class Review(ui.LayoutView):
  @classmethod
  async def make(cls,r):
   leader=None
+  placement=None
   if r["status"] in ("pending","awaiting_proof"):
-   leader=await store.best_approved(
-    r["guild"],r["category"],r["activity"],r["variant"]
+   rows=await store.all(
+    """SELECT * FROM submissions WHERE guild=? AND category=? AND activity=? AND variant=?
+    AND status='approved' ORDER BY ms,id""",
+    (r["guild"],r["category"],r["activity"],r["variant"])
    )
-  return cls(r,leader)
+   leader=rows[0] if rows else None
+   candidates=sorted([*rows,r],key=lambda entry:(entry["ms"],entry["id"]))
+   unique_fn=(unique_solo_results if r["category"]=="Bosses"
+              and solo_boss_variant(r["activity"],r["variant"]) else unique_team_results)
+   projected=unique_fn(candidates,5)
+   placement=next((i for i,item in enumerate(projected,1) if item["id"]==r["id"]),None)
+   if placement is None:
+    all_unique=unique_fn(candidates,len(candidates))
+    placement="unchanged" if not any(item["id"]==r["id"] for item in all_unique) else "outside"
+  return cls(r,leader,placement)
 
 
 async def refresh_panel(g,activity=None):
