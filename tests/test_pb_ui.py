@@ -357,6 +357,21 @@ class PBLayoutTests(unittest.TestCase):
         )
         self.assertIn("<@707> · <@808>", submitted_text)
         self.assertIn("0:46.80", submitted_text)
+        # The comparison is visually below the submission, not above it.
+        components = panel.children
+        submitted_index = next(
+            i for i, item in enumerate(components)
+            if isinstance(item, bot.ui.Section)
+            and "SUBMITTED PB" in item.children[0].content
+        )
+        current_index = next(
+            i for i, item in enumerate(components)
+            if isinstance(item, bot.ui.TextDisplay)
+            and "CURRENT #1" in item.content
+        )
+        self.assertLess(submitted_index, current_index)
+        self.assertIn("0:37.20", components[current_index].content)
+        self.assertIn("NEW #2", components[submitted_index].accessory.label)
         self.assertTrue(bot.royal_titans_35_ready_to_refresh(submitted))
         self.assertTrue(bot.royal_titans_35_ready_to_refresh(
             dict(submitted, member_ids="707")
@@ -372,6 +387,23 @@ class PBLayoutTests(unittest.TestCase):
         self.assertFalse(bot.royal_titans_35_ready_to_refresh(
             dict(submitted, status="approved")
         ))
+
+    def test_review_submission_precedes_empty_current_record(self):
+        pending = record(id=42, ms=46800, status="pending")
+        review = bot.Review(pending, None, placement=1)
+        components = review.children[0].children
+        displayed = [
+            item.children[0].content if isinstance(item, bot.ui.Section)
+            else item.content
+            for item in components
+            if isinstance(item, (bot.ui.Section, bot.ui.TextDisplay))
+        ]
+        submitted_index = next(i for i, item in enumerate(displayed)
+                               if "SUBMITTED PB" in item)
+        current_index = next(i for i, item in enumerate(displayed)
+                             if "CURRENT #1" in item)
+        self.assertLess(submitted_index, current_index)
+        self.assertIn("No approved record yet.", displayed[current_index])
 
     def test_review_comparison_and_approved_card(self):
         self.assertTrue(bot.Review(record(), record(ms=1000000)))
