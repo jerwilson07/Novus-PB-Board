@@ -16,6 +16,7 @@ DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
 STAFF_ROLES={int(s) for s in os.getenv("STAFF_ROLE_IDS","").split(",") if s.strip().isdigit()}
 GOLD=0xEAC17B
 BLUE=0x57B7FF
+RED=0xD94A4A
 # Use the uploaded animation when present in the deployed repository.
 # PB_BANNER_URL can override this with another public GIF URL.
 PB_BANNER_GIF=Path(__file__).parent / "assets" / "novus_pb_banner.gif"
@@ -733,7 +734,8 @@ class BossLeaderboard(ui.LayoutView):
  def __init__(self,activity,blocks):
   super().__init__(timeout=None)
 
-  panel=ui.Container(accent_colour=BLUE)
+  accent=RED if activity in ("Inferno","Fortis Colosseum","Fight Caves") else BLUE
+  panel=ui.Container(accent_colour=accent)
   panel.add_item(ui.TextDisplay(
    f"## {activity_icon(activity)}{clean(activity)}"
   ))
