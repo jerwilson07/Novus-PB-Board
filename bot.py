@@ -589,7 +589,7 @@ class SnapshotPanel(ui.LayoutView):
   snapshot=["### RAID SNAPSHOT"]
   for activity in RAIDS:
    results=raid_leaders.get(activity,[])
-   snapshot.append(f"\n{activity_icon(activity)}**{RAID_LABELS[activity]} · {clean(activity)}**")
+   snapshot.append(f"\n{activity_icon(activity)}**{clean(activity)}**")
    if results:
     snapshot.extend(short_record(r,k,include_variant=True) for k,r in enumerate(results))
    else:
@@ -763,7 +763,7 @@ class RaidLeaderboard(ui.LayoutView):
 
   panel=ui.Container(accent_colour=GOLD)
   panel.add_item(ui.TextDisplay(
-   f"## {activity_icon(activity)}{RAID_LABELS[activity]} · {clean(activity)}"
+   f"## {activity_icon(activity)}{clean(activity)}"
   ))
 
   for block_index,(variant,results) in enumerate(blocks):
@@ -828,8 +828,7 @@ class RaidBrowser(ui.LayoutView):
 
   panel=ui.Container(accent_colour=GOLD)
   panel.add_item(ui.TextDisplay(
-   f"## ✦ NOVUS · {activity_icon(activity)}{RAID_LABELS[activity]}\n"
-   f"**{clean(activity)}**"
+   f"## ✦ NOVUS · {activity_icon(activity)}{clean(activity)}"
   ))
 
   raid_row=ui.ActionRow()
