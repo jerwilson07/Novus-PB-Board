@@ -569,11 +569,6 @@ async def on_ready():
  if not getattr(bot,"_first_card_retrofit_started",False):
   bot._first_card_retrofit_started=True
   asyncio.create_task(retrofit_existing_first_announcements())
- # Undo the earlier automatic #35 roster change and re-render the staff card.
- # This update changes display text only for future submissions.
- if not getattr(bot,"_royal_titans_display_fix_started",False):
-  bot._royal_titans_display_fix_started=True
-  asyncio.create_task(restore_royal_titans_35_and_refresh_card())
  # Retrieve actual emoji IDs, then update existing leaderboard messages in place.
  for guild in bot.guilds:
   await fetch_activity_emojis(guild)
@@ -1143,73 +1138,6 @@ class Browser(ui.LayoutView):
   )
 
 
-def original_royal_titans_team_35(record):
- """Undo only the exact submitter append performed by our previous deployment."""
- if not record:
-  return None
- if not (
-  record["id"]==35 and record["category"]=="Bosses"
-  and record["activity"]=="Royal Titans"
-  and record["variant"]=="Standard"
-  and record["pb_date"]=="2026-11-11"
-  and record["ms"]==46800
-  and record["review_message"]==1570207527088431165
-  and record["status"] in ("pending","awaiting_proof")
- ):
-  return None
- ids=[x.strip() for x in (record["member_ids"] or "").split(",") if x.strip().isdigit()]
- names=(record["members"] or "").rsplit(", ",1)
- if len(ids)!=2 or len(names)!=2:
-  return None
- if ids[-1]!=str(record["submitter"]) or ids[0]==ids[-1]:
-  return None
- return ids[0],names[0]
-
-
-async def restore_royal_titans_35_and_refresh_card():
- """Revert the mistaken roster append and edit existing review #35 in place."""
- await asyncio.sleep(3)
- try:
-  record=await store.one("SELECT * FROM submissions WHERE id=?",(35,))
-  if not record:
-   return
-  if GUILD_ID and record["guild"]!=GUILD_ID:
-   return
-  original=original_royal_titans_team_35(record)
-  if original is not None:
-   member_id,member_name=original
-   async with store.lock:
-    cursor=await store.conn.execute(
-     """UPDATE submissions SET member_ids=?,members=?
-     WHERE id=? AND guild=? AND status IN ('pending','awaiting_proof')
-     AND member_ids=? AND members=? AND review_message=?""",
-     (member_id,member_name,35,record["guild"],
-      record["member_ids"],record["members"],record["review_message"])
-    )
-    changed=cursor.rowcount
-    await store.conn.commit()
-   logging.info("Reverted prior automated Royal Titans #35 team append: %s",changed)
-  else:
-   logging.info("Royal Titans #35 roster did not match previous automated append")
-
-  current=await store.one("SELECT * FROM submissions WHERE id=?",(35,))
-  if current["status"] not in ("pending","awaiting_proof"):
-   logging.warning("Royal Titans #35 no longer pending; review not rewritten")
-   return
-  if current["review_channel"] and current["review_message"]:
-   ch=bot.get_channel(current["review_channel"]) or await bot.fetch_channel(current["review_channel"])
-   msg=await ch.fetch_message(current["review_message"])
-   await msg.edit(
-    view=await Review.make(current),
-    allowed_mentions=discord.AllowedMentions.none()
-   )
-   logging.info("Updated Royal Titans #35 review header without changing submitted team")
- except discord.HTTPException:
-  logging.exception("Unable to refresh Royal Titans #35 review header")
- except Exception:
-  logging.exception("Unable to restore Royal Titans #35 roster and display")
-
-
 class Review(ui.LayoutView):
  def __init__(self,r,leader=None,placement=None):
   active=r["status"] in ("pending","awaiting_proof")
@@ -1235,8 +1163,7 @@ class Review(ui.LayoutView):
     ui.TextDisplay(
      f"## ✦ NOVUS | PB REVIEW\n"
      f"**{clean(r['activity'])}** · {clean(r['variant'])}\n"
-     f"-# Submission #{r['id']} · Submitted by <@{r['submitter']}>\n"
-     f"-# Listed players: {review_members(r)}"
+     f"-# Submission #{r['id']} · Submitted by <@{r['submitter']}>"
     ),
     accessory=status_badge
    )
@@ -1245,6 +1172,11 @@ class Review(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(ui.TextDisplay("-# PB DATE\n" f"**{clean(r['pb_date'] or 'Not recorded')}**"))
   if active:
+   panel.add_item(ui.TextDisplay(
+    "-# CURRENT #1\n" +
+    (f"**{review_members(leader)}** · **{fmt(leader['ms'])}**" if leader else "No approved record yet.")
+   ))
+   panel.add_item(ui.Separator())
    if not leader:
     difference="First record for this leaderboard"
    elif r["ms"]<leader["ms"]:
@@ -1262,11 +1194,6 @@ class Review(ui.LayoutView):
     accessory=ui.Button(label=label,disabled=True,
      style=discord.ButtonStyle.success if placement==1 else discord.ButtonStyle.secondary,
      custom_id=f"pb:placement:{self.sid}")
-   ))
-   panel.add_item(ui.Separator())
-   panel.add_item(ui.TextDisplay(
-    "-# CURRENT #1\n" +
-    (f"**{review_members(leader)}** · **{fmt(leader['ms'])}**" if leader else "No approved record yet.")
    ))
 
   p=r["proof"]
