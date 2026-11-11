@@ -477,7 +477,7 @@ async def on_ready():
    try:
     ch=bot.get_channel(directory["channel"]) or await bot.fetch_channel(directory["channel"])
     message=await ch.fetch_message(directory["message"])
-    await paced_startup_edit(view=BossDirectory(jump_links),allowed_mentions=discord.AllowedMentions.none())
+    await paced_startup_edit(message, view=BossDirectory(jump_links),allowed_mentions=discord.AllowedMentions.none())
    except discord.HTTPException:
     logging.exception("Failed to refresh PB directory emojis")
   # Update the existing home panel with the latest heading and points.
@@ -486,7 +486,7 @@ async def on_ready():
    try:
     ch=bot.get_channel(home["channel"]) or await bot.fetch_channel(home["channel"])
     message=await ch.fetch_message(home["message"])
-    await paced_startup_edit(view=await Home.make(guild.id),allowed_mentions=discord.AllowedMentions.none())
+    await paced_startup_edit(message, view=await Home.make(guild.id),allowed_mentions=discord.AllowedMentions.none())
    except discord.HTTPException:
     logging.exception("Failed to refresh PB home panel heading")
   # Refresh the existing footer in place so no /pbpanel rerun is needed.
@@ -497,7 +497,7 @@ async def on_ready():
     ch=bot.get_channel(footer["channel"]) or await bot.fetch_channel(footer["channel"])
     message=await ch.fetch_message(footer["message"])
     url=f"https://discord.com/channels/{guild.id}/{panel['channel']}/{panel['message']}"
-    await paced_startup_edit(content=f"## [↑ CLICK TO SCROLL TO THE TOP]({url})",allowed_mentions=discord.AllowedMentions.none())
+    await paced_startup_edit(message, content=f"## [↑ CLICK TO SCROLL TO THE TOP]({url})",allowed_mentions=discord.AllowedMentions.none())
    except discord.HTTPException:
     logging.exception("Failed to refresh PB scroll-to-top footer")
   for record in records:
@@ -507,7 +507,7 @@ async def on_ready():
     ch=bot.get_channel(record["channel"]) or await bot.fetch_channel(record["channel"])
     message=await ch.fetch_message(record["message"])
     view=await (BossLeaderboard.make(guild.id,activity) if activity in BOSSES else RaidLeaderboard.make(guild.id,activity))
-    await paced_startup_edit(view=view,allowed_mentions=discord.AllowedMentions.none())
+    await paced_startup_edit(message, view=view,allowed_mentions=discord.AllowedMentions.none())
    except discord.HTTPException:
     logging.exception("Failed to refresh PB icon for %s",activity)
 
@@ -518,7 +518,7 @@ async def on_ready():
    try:
     channel=bot.get_channel(tracked["channel"]) or await bot.fetch_channel(tracked["channel"])
     message=await channel.fetch_message(tracked["message"])
-    await paced_startup_edit(
+    await paced_startup_edit(message, 
      view=await Home.make(tracked["guild"]),
      allowed_mentions=discord.AllowedMentions.none()
     )
