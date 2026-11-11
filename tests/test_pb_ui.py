@@ -251,12 +251,41 @@ class PBLayoutTests(unittest.TestCase):
             pb, previous, "https://discord.com/channels/1/2/3"
         )
         self.assertEqual(len(card.children), 1)
-        self.assertEqual(int(card.children[0].accent_colour), bot.GOLD)
-        text = card.children[0].children[0].content
+        panel = card.children[0]
+        self.assertEqual(int(panel.accent_colour), bot.GOLD)
+        self.assertLessEqual(len(panel.children), 10)
+        header = panel.children[0]
+        self.assertIsInstance(header, bot.ui.Section)
+        self.assertEqual(header.accessory.label, "New #1")
+        self.assertEqual(header.accessory.style, bot.discord.ButtonStyle.success)
+        self.assertTrue(header.accessory.disabled)
+        text = "\\n".join(
+            child.content for child in panel.children
+            if isinstance(child, bot.ui.TextDisplay)
+        ) + header.children[0].content
         self.assertIn("NEW NOVUS #1", text)
-        self.assertIn("November 8, 2026", text)
+        self.assertIn("The Fractured Archive", text)
+        self.assertIn("Achieved by <@456>", text)
+        self.assertIn("2026-11-08", text)
+        self.assertIn("PB TIME", text)
+        self.assertIn("PB DATE", text)
         self.assertIn("0:12.40", text)
         self.assertIn("14:32.60", text)
+        self.assertTrue(any(isinstance(child, bot.ui.MediaGallery)
+                            for child in panel.children))
+        buttons = next(child for child in panel.children
+                       if isinstance(child, bot.ui.ActionRow))
+        self.assertEqual([button.label for button in buttons.children],
+                         ["View Proof", "View Leaderboard"])
+
+    def test_new_first_card_handles_non_image_evidence(self):
+        pb = record(id=83, proof="https://example.com/watch")
+        panel = bot.FirstPlaceAnnouncementCard(pb).children[0]
+        self.assertFalse(any(isinstance(child, bot.ui.MediaGallery)
+                             for child in panel.children))
+        self.assertTrue(any(isinstance(child, bot.ui.TextDisplay)
+                            and "Open submitted evidence" in child.content
+                            for child in panel.children))
 
     def test_member_profile_uses_team_placements_and_points(self):
         p1 = record(id=101, member_ids="123,456,789", ms=600000)
@@ -318,6 +347,44 @@ class PBLayoutTests(unittest.TestCase):
 
 
 class NewFirstAnnouncementTests(unittest.TestCase):
+    def test_match_only_unambiguous_legacy_announcement(self):
+        from types import SimpleNamespace
+
+        old = record(id=97, status="approved")
+        message_text = bot.first_place_announcement(old, None)
+        message = SimpleNamespace(components=[
+            SimpleNamespace(children=[
+                SimpleNamespace(content=message_text, children=[])
+            ], content=None)
+        ])
+        self.assertIs(bot.match_legacy_first_post(message, [old]), old)
+        self.assertIsNone(bot.match_legacy_first_post(message, [
+            old, record(id=98, status="approved")
+        ]))
+        updated = SimpleNamespace(components=[
+            SimpleNamespace(children=[
+                SimpleNamespace(content="## 🏆 NEW NOVUS #1\\n-# PB TIME",
+                                children=[])
+            ], content=None)
+        ])
+        self.assertIsNone(bot.match_legacy_first_post(updated, [old]))
+
+    def test_previous_approved_leader_is_from_earlier_approvals(self):
+        current = record(id=103, status="approved",
+                         updated="2026-11-11T20:00:00+00:00", ms=60000)
+        older = record(id=101, status="approved", ms=80000,
+                       updated="2026-11-11T17:00:00+00:00")
+        later = record(id=102, status="approved", ms=50000,
+                       updated="2026-11-11T21:00:00+00:00")
+        other = record(id=104, status="approved", ms=30000,
+                       activity="Vorkath",
+                       updated="2026-11-11T17:00:00+00:00")
+        self.assertIs(bot.previous_approved_leader(
+            current, [current, older, later, other]
+        ), older)
+        self.assertIsNone(bot.previous_approved_leader(current, [current]))
+
+
     def test_only_a_new_fastest_approved_record_qualifies(self):
         leader = record(id=11, ms=885000)
         contender = record(id=12, ms=872600)
