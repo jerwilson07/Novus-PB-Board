@@ -136,6 +136,44 @@ def discord_updated(timestamp):
   return None
 
 def now(): return datetime.now(timezone.utc).isoformat(timespec="seconds")
+# Server emoji names correspond to the PNG files in the Novus Discord emoji pack.
+# No hardcoded emoji IDs: existing server emojis are resolved at render time.
+ACTIVITY_EMOJIS={
+ "The Fractured Archive":"ocellus",
+ "Theatre of Blood":"verzik",
+ "Tombs of Amascut":"warden",
+ "Inferno":"zuk",
+ "Fortis Colosseum":"sol_heredit",
+ "Fight Caves":"jad",
+ "Alchemical Hydra":"hydra",
+ "Araxxor":"araxxor",
+ "Grotesque Guardians":"dawn",
+ "Gauntlet":"crystalline_hunllef",
+ "Corrupted Gauntlet":"corrupted_hunllef",
+ "Doom of Mokhaiotl":"doom",
+ "Demonic Brutus":"demonic_brutus",
+ "Mad Angel":"mad_angel",
+ "Maggot King":"maggot_king",
+ "Phantom Muspah":"muspah",
+ "Phosani's Nightmare":"nightmare",
+ "Royal Titans":"eldric",
+ "Vorkath":"vorkath",
+ "Yama":"yama",
+ "Zulrah":"zulrah",
+ "Duke Sucellus":"duke_sucellus",
+ "The Leviathan":"leviathan",
+ "Vardorvis":"vardorvis",
+ "The Whisperer":"whisperer",
+}
+
+def activity_icon(activity):
+ name=ACTIVITY_EMOJIS.get(activity)
+ if not name:return ""
+ guild=bot.get_guild(GUILD_ID) if GUILD_ID else (bot.guilds[0] if bot.guilds else None)
+ if not guild:return ""
+ emoji=discord.utils.get(guild.emojis,name=name)
+ return f"{str(emoji)} " if emoji else ""
+
 def clean(v): return discord.utils.escape_mentions(discord.utils.escape_markdown(str(v)))
 def valid_url(v):
  try:
@@ -509,7 +547,7 @@ class SnapshotPanel(ui.LayoutView):
   snapshot=["### RAID SNAPSHOT"]
   for activity in RAIDS:
    results=raid_leaders.get(activity,[])
-   snapshot.append(f"\n**{RAID_LABELS[activity]} · {clean(activity)}**")
+   snapshot.append(f"\n{activity_icon(activity)}**{RAID_LABELS[activity]} · {clean(activity)}**")
    if results:
     snapshot.extend(short_record(r,k,include_variant=True) for k,r in enumerate(results))
    else:
@@ -573,9 +611,9 @@ class BossDirectory(ui.LayoutView):
   for name in ("Inferno","Fortis Colosseum","Fight Caves"):
    url=jump_links.get(name)
    lines.append(
-    f"[{name}]({url})"
+    f"{activity_icon(name)}[{name}]({url})"
     if url
-    else f"**{name}**"
+    else f"{activity_icon(name)}**{name}**"
    )
 
   lines.append("### Raids")
@@ -583,9 +621,9 @@ class BossDirectory(ui.LayoutView):
    label=RAID_LABELS[activity]
    url=jump_links.get(activity)
    lines.append(
-    f"[{label}]({url})"
+    f"{activity_icon(activity)}[{label}]({url})"
     if url
-    else f"**{label}**"
+    else f"{activity_icon(activity)}**{label}**"
    )
 
   remaining_groups=[
@@ -624,7 +662,7 @@ class BossLeaderboard(ui.LayoutView):
 
   panel=ui.Container(accent_colour=BLUE)
   panel.add_item(ui.TextDisplay(
-   f"## {clean(activity)}"
+   f"## {activity_icon(activity)}{clean(activity)}"
   ))
 
   for block_index,(variant,results) in enumerate(blocks):
@@ -683,7 +721,7 @@ class RaidLeaderboard(ui.LayoutView):
 
   panel=ui.Container(accent_colour=GOLD)
   panel.add_item(ui.TextDisplay(
-   f"## {RAID_LABELS[activity]} · {clean(activity)}"
+   f"## {activity_icon(activity)}{RAID_LABELS[activity]} · {clean(activity)}"
   ))
 
   for block_index,(variant,results) in enumerate(blocks):
@@ -748,7 +786,7 @@ class RaidBrowser(ui.LayoutView):
 
   panel=ui.Container(accent_colour=GOLD)
   panel.add_item(ui.TextDisplay(
-   f"## ✦ NOVUS · {RAID_LABELS[activity]}\n"
+   f"## ✦ NOVUS · {activity_icon(activity)}{RAID_LABELS[activity]}\n"
    f"**{clean(activity)}**"
   ))
 
