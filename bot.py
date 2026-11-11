@@ -738,46 +738,73 @@ class BossDirectory(ui.LayoutView):
   self.add_item(panel)
 
 
+
+def add_featured_ranking(panel, results):
+ # Display one featured champion and keep the remaining places easy to scan.
+ # No custom fonts or image cards: everything is native Discord Components V2.
+ if not results:
+  panel.add_item(ui.TextDisplay(
+   "-# No approved records yet.\n" +
+   "\n".join(f"{medal} Empty" for medal in MEDALS)
+  ))
+  return
+
+ champion=results[0]
+ champion_text=(
+  f"## 🏆 {fmt(champion['ms'])}\n"
+  f"{public_members(champion)}"
+ )
+ if champion["proof"] and valid_url(champion["proof"]):
+  champion_text+=f"\n[↗ Proof]({champion['proof']})"
+
+ panel.add_item(ui.Section(
+  ui.TextDisplay(champion_text),
+  accessory=ui.Button(
+   label="NOVUS #1",
+   style=discord.ButtonStyle.secondary,
+   disabled=True,
+   custom_id=f"pb:leader:first:{champion['id']}"
+  )
+ ))
+
+ remaining=[]
+ for rank in range(1,5):
+  if rank>=len(results):
+   remaining.append(f"{MEDALS[rank]} Empty")
+   continue
+  r=results[rank]
+  proof=(
+   f" · [Proof]({r['proof']})"
+   if r["proof"] and valid_url(r["proof"])
+   else ""
+  )
+  remaining.append(
+   f"{MEDALS[rank]} **{fmt(r['ms'])}** · {public_members(r)}{proof}"
+  )
+
+ panel.add_item(ui.Separator())
+ panel.add_item(ui.TextDisplay("\n".join(remaining)))
+
+
 class BossLeaderboard(ui.LayoutView):
  def __init__(self,activity,blocks):
   super().__init__(timeout=None)
 
   accent=RED if activity in ("Inferno","Fortis Colosseum","Fight Caves") else BLUE
-  panel=ui.Container(accent_colour=accent)
-  panel.add_item(ui.TextDisplay(
+  heading=ui.Container(accent_colour=accent)
+  heading.add_item(ui.TextDisplay(
    f"## {activity_icon(activity)}{clean(activity)}"
   ))
+  self.add_item(heading)
 
-  for block_index,(variant,results) in enumerate(blocks):
-   if block_index:
-    panel.add_item(ui.Separator())
-
-   lines=[]
-   if len(blocks)>1:
-    lines.append(f"### {clean(variant)}")
-
-   for rank in range(5):
-    medal=MEDALS[rank]
-    if rank < len(results):
-     r=results[rank]
-     proof=(
-      f" · [Proof]({r['proof']})"
-      if r["proof"] and valid_url(r["proof"])
-      else ""
-     )
-     lines.append(
-      f"{medal} **{fmt(r['ms'])}**{proof} · {public_members(r)}"
-     )
-    else:
-     lines.append(
-      f"{medal} Empty"
-     )
-
-   panel.add_item(
-    ui.TextDisplay("\n".join(lines))
-   )
-
-  self.add_item(panel)
+  # Give each variant its own short, readable panel instead of a single wall
+  # of text. This also avoids Discord's per-container component count limit.
+  for variant,results in blocks:
+   panel=ui.Container(accent_colour=accent)
+   title=f"### {clean(variant)} · TOP 5" if len(blocks)>1 else "### TOP 5"
+   panel.add_item(ui.TextDisplay(title))
+   add_featured_ranking(panel,results)
+   self.add_item(panel)
 
  @classmethod
  async def make(cls,g,activity):
@@ -802,39 +829,19 @@ class RaidLeaderboard(ui.LayoutView):
  def __init__(self,activity,blocks):
   super().__init__(timeout=None)
 
-  panel=ui.Container(accent_colour=GOLD)
-  panel.add_item(ui.TextDisplay(
+  heading=ui.Container(accent_colour=GOLD)
+  heading.add_item(ui.TextDisplay(
    f"## {activity_icon(activity)}{clean(activity)}"
   ))
+  self.add_item(heading)
 
-  for block_index,(variant,results) in enumerate(blocks):
-   if block_index:
-    panel.add_item(ui.Separator())
-
-   lines=[f"### {clean(variant)}"]
-
-   for rank in range(5):
-    medal=MEDALS[rank]
-    if rank < len(results):
-     r=results[rank]
-     proof=(
-      f" · [Proof]({r['proof']})"
-      if r["proof"] and valid_url(r["proof"])
-      else ""
-     )
-     lines.append(
-      f"{medal} **{fmt(r['ms'])}**{proof} · {public_members(r)}"
-     )
-    else:
-     lines.append(
-      f"{medal} Empty"
-     )
-
-   panel.add_item(
-    ui.TextDisplay("\n".join(lines))
-   )
-
-  self.add_item(panel)
+  for variant,results in blocks:
+   panel=ui.Container(accent_colour=GOLD)
+   panel.add_item(ui.TextDisplay(
+    f"### {clean(variant)} · TOP 5"
+   ))
+   add_featured_ranking(panel,results)
+   self.add_item(panel)
 
  @classmethod
  async def make(cls,g,activity):
@@ -919,31 +926,7 @@ class RaidBrowser(ui.LayoutView):
   ))
   rankings.add_item(ui.Separator())
 
-  if not results:
-   rankings.add_item(ui.TextDisplay(
-    "-# No records yet."
-   ))
-  else:
-   champion=results[0]
-   top_text=(
-    f"## 🥇 {fmt(champion['ms'])}\n"
-    f"{public_members(champion)}"
-   )
-   if champion["proof"] and valid_url(champion["proof"]):
-    top_text+=f"\n[↗ Proof]({champion['proof']})"
-   rankings.add_item(ui.Section(
-    ui.TextDisplay(top_text),
-    accessory=ui.Button(
-     label="NOVUS #1",
-     style=discord.ButtonStyle.secondary,
-     disabled=True
-    )
-   ))
-   if len(results)>1:
-    rankings.add_item(ui.Separator())
-    rankings.add_item(ui.TextDisplay(
-     "\n".join(short_record(r,k) for k,r in enumerate(results) if k>0)
-    ))
+  add_featured_ranking(rankings,results)
 
   shortcuts=ui.ActionRow()
   submit=ui.Button(label="Submit PB",style=discord.ButtonStyle.success)
@@ -1012,15 +995,9 @@ class Browser(ui.LayoutView):
   for pos,(variant,results) in enumerate(blocks):
    if pos:
     rankings.add_item(ui.Separator())
-   lines=[f"### {clean(variant)} · TOP 5"]
-   if not results:
-    lines.append("-# No records yet.")
-   else:
-    for rank,r in enumerate(results):
-     if rank:
-      lines.append("")
-     lines.append(short_record(r,rank))
-   rankings.add_item(ui.TextDisplay("\n".join(lines)))
+   title=f"### {clean(variant)} · TOP 5" if variant!="Standard" else "### TOP 5"
+   rankings.add_item(ui.TextDisplay(title))
+   add_featured_ranking(rankings,results)
 
   shortcuts=ui.ActionRow()
   submit=ui.Button(label="Submit PB",style=discord.ButtonStyle.success)
