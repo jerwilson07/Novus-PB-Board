@@ -123,7 +123,7 @@ class PBLayoutTests(unittest.TestCase):
         self.assertEqual(len(board.children), 1)
         panel = board.children[0]
         self.assertTrue(any(isinstance(child, bot.ui.Section)
-                            and child.children[-1].label == "NOVUS #1"
+                            and child.accessory.label == "NOVUS #1"
                             for child in panel.children))
         text = "\\n".join(
             child.content for child in panel.children
@@ -143,7 +143,7 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIsInstance(heading, bot.ui.TextDisplay)
         self.assertIn("Vorkath", heading.content)
         self.assertTrue(any(isinstance(item, bot.ui.Section)
-                            and item.children[-1].label == "NOVUS #1"
+                            and item.accessory.label == "NOVUS #1"
                             for item in panel.children))
         self.assertLessEqual(len(panel.children), 10)
 
@@ -172,9 +172,9 @@ class PBLayoutTests(unittest.TestCase):
         champion = next(child for child in board.children[0].children
                         if isinstance(child, bot.ui.Section))
         self.assertIn("🏆", champion.children[0].content)
-        self.assertEqual(champion.children[-1].label, "NOVUS #1")
-        self.assertTrue(champion.children[-1].disabled)
-        self.assertEqual(champion.children[-1].style, bot.discord.ButtonStyle.secondary)
+        self.assertEqual(champion.accessory.label, "NOVUS #1")
+        self.assertTrue(champion.accessory.disabled)
+        self.assertEqual(champion.accessory.style, bot.discord.ButtonStyle.secondary)
 
     def test_raid_variants_have_separate_containers(self):
         modes = bot.RAIDS["Theatre of Blood"]
@@ -195,7 +195,7 @@ class PBLayoutTests(unittest.TestCase):
         for view in (boss, raid):
             self.assertTrue(
                 any(isinstance(child, bot.ui.Section)
-                    and child.children[-1].label == "NOVUS #1"
+                    and child.accessory.label == "NOVUS #1"
                     for panel in view.children
                     for child in getattr(panel, "children", []))
             )
@@ -218,9 +218,9 @@ class PBLayoutTests(unittest.TestCase):
         section = next(x for x in components if isinstance(x, bot.ui.Section))
         self.assertIn("🏆", section.children[0].content)
         self.assertIn("November 8, 2026", section.children[0].content)
-        self.assertEqual(section.children[-1].label, "NOVUS #1")
-        self.assertTrue(section.children[-1].disabled)
-        self.assertEqual(section.children[-1].style, bot.discord.ButtonStyle.secondary)
+        self.assertEqual(section.accessory.label, "NOVUS #1")
+        self.assertTrue(section.accessory.disabled)
+        self.assertEqual(section.accessory.style, bot.discord.ButtonStyle.secondary)
 
     def test_board_titles_keep_variant_without_redundant_top_five(self):
         record_one = record()
