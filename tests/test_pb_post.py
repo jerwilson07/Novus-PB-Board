@@ -49,7 +49,9 @@ class PBPostTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(home.id, messages[0][0].id)
         self.assertEqual(raid_make.await_count, len(bot.RAIDS))
         self.assertEqual(boss_make.await_count, len(bot.BOSSES))
-        self.assertEqual(messages[0][2]["allowed_mentions"], bot.discord.AllowedMentions.none())
+        self.assertFalse(messages[0][2]["allowed_mentions"].everyone)
+        self.assertFalse(messages[0][2]["allowed_mentions"].users)
+        self.assertFalse(messages[0][2]["allowed_mentions"].roles)
         self.assertEqual(messages[1][0].edit.await_count, 1)
         directory_view = messages[1][0].edit.await_args.kwargs["view"]
         self.assertIsInstance(directory_view, bot.BossDirectory)
@@ -63,7 +65,7 @@ class PBPostTests(unittest.IsolatedAsyncioTestCase):
         messages = []
         async def fake_send(*args, **kwargs):
             if len(messages) == 3:
-                raise bot.discord.Forbidden(SimpleNamespace(status=403,reason="Forbidden"),"no permission")
+                raise RuntimeError("simulated send failure")
             msg=FakeMessage(2000 + len(messages))
             messages.append(msg)
             return msg
@@ -74,7 +76,7 @@ class PBPostTests(unittest.IsolatedAsyncioTestCase):
                          return_value=bot.BossLeaderboard("Vorkath",[("Standard",[])])),
             patch.object(bot.asyncio,"sleep",new_callable=AsyncMock),
         ):
-            with self.assertRaises(bot.discord.Forbidden):
+            with self.assertRaises(RuntimeError):
                 await bot.post_current_pb_board(channel,123)
         self.assertEqual(len(messages),3)
         for msg in messages:
