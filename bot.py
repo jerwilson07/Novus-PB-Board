@@ -538,18 +538,8 @@ class PersonalPBProfile(ui.LayoutView):
     ))
    else:
     panel.add_item(ui.TextDisplay(
-     "-# No current Top 5 placements. Your approval history is below."
+     "-# No current Top 5 placements yet."
     ))
-   panel.add_item(ui.Separator())
-   lines=[
-    f"**{clean(r['activity'])} · {clean(r['variant'])}** · "
-    f"{fmt(r['ms'])} · {pb_date_label(r['pb_date'])}"
-    for r in summary["history"][:8]
-   ]
-   panel.add_item(ui.TextDisplay(
-    "### RECENT APPROVED PBs\n"+"\n".join(lines) +
-    ("\n-# Showing the 8 most recent approvals." if len(summary["history"])>8 else "")
-   ))
   self.add_item(panel)
 
 
