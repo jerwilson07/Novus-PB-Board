@@ -125,6 +125,8 @@ def short_record(r,rank,include_variant=False):
  lines.append(public_members(r))
  if r["proof"] and valid_url(r["proof"]):
   lines.append(f"[↗ Proof]({r['proof']})")
+ if rank==0:
+  lines.append(f"-# Achieved {pb_date_label(r['pb_date'])}")
  return "\n".join(lines)
 
 def discord_updated(timestamp):
@@ -136,6 +138,16 @@ def discord_updated(timestamp):
   return f"<t:{int(parsed.timestamp())}:R>"
  except (TypeError,ValueError,OverflowError):
   return None
+
+
+def pb_date_label(value):
+ """Show the exact stored PB date without timezone conversion."""
+ if not value:return "Date unavailable"
+ try:
+  parsed=datetime.strptime(str(value),"%Y-%m-%d").date()
+  return f"{parsed.strftime('%B')} {parsed.day}, {parsed.year}"
+ except ValueError:
+  return "Date unavailable"
 
 def now(): return datetime.now(timezone.utc).isoformat(timespec="seconds")
 # Server emoji names correspond to the PNG files in the Novus Discord emoji pack.
@@ -653,7 +665,8 @@ class SnapshotPanel(ui.LayoutView):
     recent_text=(
      f"**{clean(activity)} · {clean(r['variant'])}**\n"
      f"**{fmt(r['ms'])}**\n"
-     f"{public_members(r)}"
+     f"{public_members(r)}\n"
+     f"-# Achieved {pb_date_label(r['pb_date'])}"
     )
     if r["proof"] and valid_url(r["proof"]):
      recent_text+=f"\n[↗ Proof]({r['proof']})"
@@ -750,22 +763,17 @@ def add_featured_ranking(panel, results):
   return
 
  champion=results[0]
+ # No gold ButtonStyle exists in Discord. Keep the champion in a native
+ # gold-trophy heading instead of a disabled gray button.
  champion_text=(
-  f"## {MEDALS[0]} {fmt(champion['ms'])}\n"
-  f"{public_members(champion)}"
+  "### 🏆 NOVUS #1\n"
+  f"## {fmt(champion['ms'])}\n"
+  f"{public_members(champion)}\n"
+  f"-# Achieved {pb_date_label(champion['pb_date'])}"
  )
  if champion["proof"] and valid_url(champion["proof"]):
   champion_text+=f"\n[↗ Proof]({champion['proof']})"
-
- panel.add_item(ui.Section(
-  ui.TextDisplay(champion_text),
-  accessory=ui.Button(
-   label="NOVUS #1",
-   style=discord.ButtonStyle.secondary,
-   disabled=True,
-   custom_id=f"pb:leader:first:{champion['id']}"
-  )
- ))
+ panel.add_item(ui.TextDisplay(champion_text))
 
  remaining=[]
  for rank in range(1,5):
@@ -1236,7 +1244,7 @@ def qualifies_for_first_place(new_record, previous_leader, current_ranking):
 
 
 def first_place_announcement(r, previous_leader, leaderboard_url=None):
- title=RAID_LABELS.get(r["activity"],r["activity"])
+ title=r["activity"]
  names=public_members(r)
  if previous_leader is None:
   comparison="-# First approved PB for this leaderboard."
@@ -1249,6 +1257,7 @@ def first_place_announcement(r, previous_leader, leaderboard_url=None):
   f"## {fmt(r['ms'])}",
   names,
   comparison,
+  f"-# PB achieved {pb_date_label(r['pb_date'])}",
  ]
  links=[]
  if r["proof"] and valid_url(r["proof"]):
@@ -1259,6 +1268,25 @@ def first_place_announcement(r, previous_leader, leaderboard_url=None):
   lines.append(" · ".join(links))
  return "\n".join(lines)
 
+
+
+class FirstPlaceAnnouncementCard(ui.LayoutView):
+ """A native Discord Components V2 record announcement with gold accent."""
+ def __init__(self,record,previous_leader=None,leaderboard_url=None):
+  super().__init__(timeout=900)
+  panel=ui.Container(accent_colour=GOLD)
+  panel.add_item(ui.TextDisplay(first_place_announcement(record,previous_leader)))
+  actions=ui.ActionRow()
+  if record["proof"] and valid_url(record["proof"]):
+   actions.add_item(ui.Button(
+    label="View Proof",style=discord.ButtonStyle.link,url=record["proof"]
+   ))
+  if leaderboard_url:
+   actions.add_item(ui.Button(
+    label="View Leaderboard",style=discord.ButtonStyle.link,url=leaderboard_url
+   ))
+  if actions.children:panel.add_item(actions)
+  self.add_item(panel)
 
 async def announce_first_place(r, previous_leader):
  # Read the final approved standings, not just the review-card projection.
@@ -1276,7 +1304,7 @@ async def announce_first_place(r, previous_leader):
   url=(f"https://discord.com/channels/{r['guild']}/{board['channel']}/{board['message']}"
        if board else None)
   await channel.send(
-   first_place_announcement(r,previous_leader,url),
+   view=FirstPlaceAnnouncementCard(r,previous_leader,url),
    allowed_mentions=discord.AllowedMentions(users=True,roles=False,everyone=False)
   )
   logging.info("Announced new Novus #1 submission %s in general chat",r["id"])
