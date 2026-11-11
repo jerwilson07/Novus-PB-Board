@@ -112,6 +112,49 @@ class PBLayoutTests(unittest.TestCase):
         self.assertTrue(bot.RaidBrowser(123, 0, 0, []))
         self.assertTrue(bot.Browser(123, "Bosses", 0, [("Normal", [])]))
 
+    def test_public_boards_feature_champion_and_keep_empty_slots(self):
+        champion = record(id=41, category="Bosses", activity="Vorkath",
+                          variant="Standard")
+        runner_up = record(id=42, category="Bosses", activity="Vorkath",
+                           variant="Standard", ms=925000)
+        board = bot.BossLeaderboard(
+            "Vorkath", [("Standard", [champion, runner_up])]
+        )
+        self.assertEqual(len(board.children), 2)
+        panel = board.children[1]
+        self.assertTrue(any(isinstance(child, bot.ui.Section)
+                            for child in panel.children))
+        text = "\\n".join(
+            child.content for child in panel.children
+            if isinstance(child, bot.ui.TextDisplay)
+        )
+        self.assertIn("TOP 5", text)
+        self.assertIn("15:25.00", text)
+        self.assertIn("Empty", text)
+
+    def test_raid_variants_have_separate_containers(self):
+        modes = bot.RAIDS["Theatre of Blood"]
+        board = bot.RaidLeaderboard(
+            "Theatre of Blood", [(variant, []) for variant in modes]
+        )
+        self.assertEqual(len(board.children), 1 + len(modes))
+        for variant_panel in board.children[1:]:
+            self.assertLessEqual(len(variant_panel.children), 10)
+
+    def test_browsers_feature_first_record_with_native_section(self):
+        first = record(id=71, category="Bosses", activity="Vorkath",
+                       variant="Standard")
+        boss = bot.Browser(123, "Bosses",
+                           list(bot.BOSSES).index("Vorkath"),
+                           [("Standard", [first])])
+        raid = bot.RaidBrowser(123, 0, 0, [record(id=72)])
+        for view in (boss, raid):
+            self.assertTrue(
+                any(isinstance(child, bot.ui.Section)
+                    for panel in view.children
+                    for child in getattr(panel, "children", []))
+            )
+
     def test_review_card_with_media_does_not_exceed_container_limit(self):
         review = bot.Review(record())
         self.assertLessEqual(len(review.children[0].children), 10)
