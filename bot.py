@@ -1,6 +1,6 @@
 import os, re, asyncio, logging
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse
 import discord, aiosqlite
 from discord import app_commands, ui
@@ -565,6 +565,10 @@ async def on_ready():
  if getattr(bot, "_startup_panels_refreshed", False):return
  bot._startup_panels_refreshed=True
  logging.info("Novus PB bot ready as %s (%s)",bot.user,bot.user.id)
+ # One-time update of the two previously posted #1 cards, without reposting.
+ if not getattr(bot,"_first_card_retrofit_started",False):
+  bot._first_card_retrofit_started=True
+  asyncio.create_task(retrofit_existing_first_announcements())
  # Retrieve actual emoji IDs, then update existing leaderboard messages in place.
  for guild in bot.guilds:
   await fetch_activity_emojis(guild)
@@ -1431,6 +1435,121 @@ class FirstPlaceAnnouncementCard(ui.LayoutView):
   if links.children:
    panel.add_item(links)
   self.add_item(panel)
+
+
+def old_announcement_text(message):
+ """Extract text from a Discord Components V2 announcement, including containers."""
+ chunks=[]
+ def walk(item):
+  content=getattr(item,"content",None)
+  if isinstance(content,str):
+   chunks.append(content)
+  for child in getattr(item,"children",()) or ():
+   walk(child)
+ for component in getattr(message,"components",()) or ():
+  walk(component)
+ return "\n".join(chunks)
+
+
+def match_legacy_first_post(message,approved):
+ """Only accept an unambiguously matched, old-style Novus #1 card."""
+ text=old_announcement_text(message)
+ if "NEW NOVUS #1" not in text or "PB TIME" in text:
+  return None
+ found=[]
+ for record in approved:
+  if (
+   f"**{clean(record['activity'])} · {clean(record['variant'])}**" in text
+   and f"## {fmt(record['ms'])}" in text
+   and public_members(record) in text
+   and f"PB achieved {pb_date_label(record['pb_date'])}" in text
+  ):
+   found.append(record)
+ return found[0] if len(found)==1 else None
+
+
+def previous_approved_leader(record,approved):
+ """Recover the fastest earlier approval for the new card's comparison."""
+ older=[
+  candidate for candidate in approved
+  if candidate["id"]!=record["id"]
+  and candidate["category"]==record["category"]
+  and candidate["activity"]==record["activity"]
+  and candidate["variant"]==record["variant"]
+  and candidate["updated"] < record["updated"]
+ ]
+ return min(older,key=lambda row:(row["ms"],row["id"])) if older else None
+
+
+async def retrofit_existing_first_announcements():
+ """One-off, targeted edit of the two latest legacy #1 posts in general-chat.
+
+ The DB flag prevents future deployments from editing unrelated older posts.
+ Skip any message that isn't bot-authored or cannot match a unique approved PB.
+ """
+ await asyncio.sleep(12)
+ if not GENERAL_CHAT_ID or not bot.user:
+  return
+ op="review_style_first_announcements_20261111_two"
+ try:
+  async with store.lock:
+   await store.conn.execute(
+    "CREATE TABLE IF NOT EXISTS one_time_pb_migrations "
+    "(name TEXT PRIMARY KEY, applied TEXT NOT NULL)"
+   )
+   await store.conn.commit()
+  if await store.one(
+   "SELECT name FROM one_time_pb_migrations WHERE name=?",(op,)
+  ):
+   return
+
+  channel=bot.get_channel(GENERAL_CHAT_ID) or await bot.fetch_channel(GENERAL_CHAT_ID)
+  guild=getattr(channel,"guild",None)
+  if not guild or (GUILD_ID and guild.id!=GUILD_ID):
+   logging.warning("Legacy #1 retrofit skipped: general-chat guild mismatch")
+   return
+  approved=await store.all(
+   "SELECT * FROM submissions WHERE guild=? AND status='approved'",
+   (guild.id,)
+  )
+  since=datetime.now(timezone.utc)-timedelta(hours=18)
+  changed=0
+  async for message in channel.history(limit=500,after=since):
+   if message.author.id!=bot.user.id:
+    continue
+   record=match_legacy_first_post(message,approved)
+   if record is None:
+    continue
+   previous=previous_approved_leader(record,approved)
+   board=await store.boss_board(record["guild"],record["activity"])
+   board_url=(
+    f"https://discord.com/channels/{record['guild']}/{board['channel']}/{board['message']}"
+    if board else None
+   )
+   await message.edit(
+    view=FirstPlaceAnnouncementCard(record,previous,board_url),
+    allowed_mentions=discord.AllowedMentions(users=True,roles=False,everyone=False)
+   )
+   changed+=1
+   logging.info(
+    "Updated existing Novus #1 announcement message=%s record=%s",
+    message.id,record["id"]
+   )
+   if changed>=2:
+    break
+
+  async with store.lock:
+   await store.conn.execute(
+    "INSERT OR IGNORE INTO one_time_pb_migrations(name,applied) VALUES(?,?)",
+    (op,now())
+   )
+   await store.conn.commit()
+  logging.info("One-time Novus #1 announcement retrofit completed: %s/2",changed)
+ except (discord.Forbidden,discord.HTTPException):
+  logging.exception("Could not edit existing Novus #1 announcements")
+ except Exception:
+  logging.exception("Unexpected error editing existing Novus #1 announcements")
+
 
 async def announce_first_place(r, previous_leader):
  # Read the final approved standings, not just the review-card projection.
