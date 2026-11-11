@@ -62,7 +62,7 @@ NON_SOLO_BOSSES={"Yama","Royal Titans"}
 
 def solo_boss_variant(activity,variant):
  return activity not in NON_SOLO_BOSSES
-MEDALS=["🥇","🥈","🥉","4.","5."]
+MEDALS=["🏆","🥈","🥉","4.","5."]
 PB_EARLIEST_DATE=datetime(2026,11,7).date()
 
 def pb_date_eligible(value):
@@ -751,7 +751,7 @@ def add_featured_ranking(panel, results):
 
  champion=results[0]
  champion_text=(
-  f"## 🏆 {fmt(champion['ms'])}\n"
+  f"## {MEDALS[0]} {fmt(champion['ms'])}\n"
   f"{public_members(champion)}"
  )
  if champion["proof"] and valid_url(champion["proof"]):
@@ -791,20 +791,21 @@ class BossLeaderboard(ui.LayoutView):
   super().__init__(timeout=None)
 
   accent=RED if activity in ("Inferno","Fortis Colosseum","Fight Caves") else BLUE
-  heading=ui.Container(accent_colour=accent)
-  heading.add_item(ui.TextDisplay(
+  # Keep the boss title and PBs in one native Discord container.
+  # Up to two variants fit the Discord 10-child limit.
+  panel=ui.Container(accent_colour=accent)
+  panel.add_item(ui.TextDisplay(
    f"## {activity_icon(activity)}{clean(activity)}"
   ))
-  self.add_item(heading)
 
-  # Give each variant its own short, readable panel instead of a single wall
-  # of text. This also avoids Discord's per-container component count limit.
-  for variant,results in blocks:
-   panel=ui.Container(accent_colour=accent)
+  for index,(variant,results) in enumerate(blocks):
+   if index:
+    panel.add_item(ui.Separator())
    title=f"### {clean(variant)} · TOP 5" if len(blocks)>1 else "### TOP 5"
    panel.add_item(ui.TextDisplay(title))
    add_featured_ranking(panel,results)
-   self.add_item(panel)
+
+  self.add_item(panel)
 
  @classmethod
  async def make(cls,g,activity):
