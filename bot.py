@@ -1142,10 +1142,23 @@ class Browser(ui.LayoutView):
   )
 
 
+def submitted_review_members(r):
+ """Display the requested two names for Royal Titans #35 without changing PB data."""
+ names=review_members(r)
+ if (
+  r["id"]==35 and r["activity"]=="Royal Titans"
+  and r["variant"]=="Standard" and r["ms"]==46800
+  and r["pb_date"]=="2026-11-11"
+ ):
+  ids=[p.strip() for p in (r["member_ids"] or "").split(",") if p.strip().isdigit()]
+  if str(r["submitter"]) not in ids:
+   return f"{names} · <@{r['submitter']}>"
+ return names
+
+
 def royal_titans_35_ready_to_refresh(r):
- """Guard against changing the wrong review card or overwriting a changed PB."""
+ """Match only the existing review; never change roster or approval state."""
  if not r:return False
- ids=[p.strip() for p in (r["member_ids"] or "").split(",") if p.strip().isdigit()]
  return (
   r["id"]==35
   and r["category"]=="Bosses"
@@ -1155,8 +1168,6 @@ def royal_titans_35_ready_to_refresh(r):
   and r["pb_date"]=="2026-11-11"
   and r["status"] in ("pending","awaiting_proof")
   and r["review_message"]==1570207527088431165
-  and len(ids)==2 and len(set(ids))==2
-  and str(r["submitter"]) in ids
  )
 
 
@@ -1178,8 +1189,16 @@ async def refresh_royal_titans_35_review_once():
   record=await store.one("SELECT * FROM submissions WHERE id=?",(35,))
   if not royal_titans_35_ready_to_refresh(record):
    logging.warning(
-    "Skipped Royal Titans #35 review refresh: team/status differs from expected; "
-    "no data was changed"
+    "Skipped Royal Titans #35 review refresh: record status or identity "
+    "changed (status=%s id=%s category=%s activity=%s variant=%s time=%s date=%s review=%s)",
+    record["status"] if record else None,
+    record["id"] if record else None,
+    record["category"] if record else None,
+    record["activity"] if record else None,
+    record["variant"] if record else None,
+    record["ms"] if record else None,
+    record["pb_date"] if record else None,
+    record["review_message"] if record else None
    )
    return
   if GUILD_ID and record["guild"]!=GUILD_ID:
@@ -1264,7 +1283,7 @@ class Review(ui.LayoutView):
           "NO RANK CHANGE" if placement=="unchanged" else "OUTSIDE TOP 5")
    panel.add_item(ui.Section(
     ui.TextDisplay("-# SUBMITTED PB\n"
-     f"**{review_members(r)}** · **{fmt(r['ms'])}**\n"
+     f"**{submitted_review_members(r)}** · **{fmt(r['ms'])}**\n"
      f"-# {difference}"),
     accessory=ui.Button(label=label,disabled=True,
      style=discord.ButtonStyle.success if placement==1 else discord.ButtonStyle.secondary,
