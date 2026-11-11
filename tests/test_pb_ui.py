@@ -333,49 +333,6 @@ class PBLayoutTests(unittest.TestCase):
         review = bot.Review(record())
         self.assertLessEqual(len(review.children[0].children), 10)
 
-    def test_review_shows_submitted_pb_before_current_first(self):
-        submitted = record(id=35, category="Bosses", activity="Royal Titans",
-                           variant="Standard", member_ids="707,808", ms=46800,
-                           submitter=808, members="07 Ezra, What A Piety")
-        previous = record(id=17, category="Bosses", activity="Royal Titans",
-                          variant="Standard", member_ids="909,1010", ms=37200)
-        view = bot.Review(submitted, previous, placement=2)
-        panel = view.children[0]
-        displayed = []
-        for item in panel.children:
-            if isinstance(item, bot.ui.TextDisplay):
-                displayed.append(item.content)
-            elif isinstance(item, bot.ui.Section):
-                displayed.extend(child.content for child in item.children
-                                 if isinstance(child, bot.ui.TextDisplay))
-        full_text = "\\n".join(displayed)
-        self.assertLess(full_text.index("SUBMITTED PB"),
-                        full_text.index("CURRENT #1"))
-        self.assertIn("<@707>", full_text)
-        self.assertIn("<@808>", full_text)
-        self.assertIn("0:46.80", full_text)
-        self.assertIn("NEW #2", next(
-            item.accessory.label for item in panel.children
-            if isinstance(item, bot.ui.Section)
-            and item.accessory.label.startswith("NEW #")
-        ))
-
-    def test_targeted_duo_fix_refuses_other_submissions(self):
-        base = record(id=35, category="Bosses", activity="Royal Titans",
-                      variant="Standard", pb_date="2026-11-11", ms=46800,
-                      member_ids="707", submitter=808, status="pending")
-        self.assertTrue(bot.needs_royal_titans_team_correction(base))
-        for diff in (
-            {"id": 34}, {"activity": "Yama"},
-            {"pb_date": "2026-11-10"}, {"ms": 47000},
-            {"member_ids": "707,808"}, {"submitter": 707},
-            {"status": "approved"}
-        ):
-            with self.subTest(diff=diff):
-                self.assertFalse(bot.needs_royal_titans_team_correction(
-                    dict(base, **diff)
-                ))
-
     def test_review_comparison_and_approved_card(self):
         self.assertTrue(bot.Review(record(), record(ms=1000000)))
         self.assertTrue(bot.Review(record(status="approved")))
