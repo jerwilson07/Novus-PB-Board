@@ -127,5 +127,29 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIsNone(bot.discord_updated(None))
 
 
+
+class PBStartupRefreshTests(unittest.TestCase):
+    def test_refresh_pacing_calls_include_the_target_message(self):
+        """Regression: missing message argument breaks the whole on_ready refresh."""
+        import ast
+        from pathlib import Path
+
+        tree = ast.parse(Path(bot.__file__).read_text(encoding="utf-8"))
+        ready = next(
+            node for node in tree.body
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == "on_ready"
+        )
+        calls = [
+            node for node in ast.walk(ready)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "paced_startup_edit"
+        ]
+        self.assertEqual(len(calls), 5)
+        for call in calls:
+            self.assertTrue(call.args, "Target Discord message must be first argument")
+            self.assertIsInstance(call.args[0], ast.Name)
+            self.assertEqual(call.args[0].id, "message")
+
 if __name__ == "__main__":
     unittest.main()
