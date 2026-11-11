@@ -197,15 +197,26 @@ def valid_url(v):
   x=urlparse(v); return x.scheme in ("http","https") and bool(x.netloc)
  except ValueError: return False
 def parse_ms(s):
- parts=s.strip().split(":")
- if len(parts) not in (2,3) or any(not x.isdecimal() for x in parts[:-1]): raise ValueError("Use MM:SS.ss or HH:MM:SS.ss.")
- if not re.fullmatch(r"\d{1,2}(?:\.\d{1,3})?",parts[-1]): raise ValueError("Invalid seconds.")
+ raw=s.strip()
+ # Under one minute, seconds may be supplied without a 00: prefix.
+ if re.fullmatch(r"\\d{1,2}(?:\\.\\d{1,3})?",raw):
+  parts=["0",raw]
+ else:
+  parts=raw.split(":")
+ if len(parts) not in (2,3) or any(not x.isdecimal() for x in parts[:-1]):
+  raise ValueError("Use SS.ss, MM:SS.ss, or HH:MM:SS.ss.")
+ if not re.fullmatch(r"\\d{1,2}(?:\\.\\d{1,3})?",parts[-1]):
+  raise ValueError("Invalid seconds.")
  secs,*fraction=parts[-1].split(".")
- seconds=int(secs); ms=int(fraction[0].ljust(3,"0")) if fraction else 0
- minutes=int(parts[-2]); hours=int(parts[0]) if len(parts)==3 else 0
- if seconds>59 or (len(parts)==3 and minutes>59): raise ValueError("Invalid seconds/minutes.")
+ seconds=int(secs)
+ ms=int(fraction[0].ljust(3,"0")) if fraction else 0
+ minutes=int(parts[-2])
+ hours=int(parts[0]) if len(parts)==3 else 0
+ if seconds>59 or (len(parts)==3 and minutes>59):
+  raise ValueError("Invalid seconds/minutes.")
  total=((hours*60+minutes)*60+seconds)*1000+ms
- if not 0<total<=86400000: raise ValueError("Time must be positive and within 24h.")
+ if not 0<total<=86400000:
+  raise ValueError("Time must be positive and within 24h.")
  return total
 def fmt(ms):
  s,m=divmod(ms,1000); minute,sec=divmod(s,60); hour,minute=divmod(minute,60)
@@ -1044,7 +1055,6 @@ class Review(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(ui.TextDisplay("-# PB DATE\n" f"**{clean(r['pb_date'] or 'Not recorded')}**"))
   if active:
-   panel.add_item(ui.Separator())
    panel.add_item(ui.TextDisplay(
     "-# CURRENT #1\n" +
     (f"**{review_members(leader)}** · **{fmt(leader['ms'])}**" if leader else "No approved record yet.")
@@ -1069,7 +1079,6 @@ class Review(ui.LayoutView):
      custom_id=f"pb:placement:{self.sid}")
    ))
 
-  panel.add_item(ui.Separator())
   p=r["proof"]
   if p and valid_url(p):
    panel.add_item(
@@ -1304,7 +1313,7 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
    pass
  if parsed_date is None:
   return await i.response.send_message(
-   "Enter the PB date as MM-DD-YYYY.",
+   "Enter the PB date as MM/DD/YYYY or MM-DD-YYYY.",
    ephemeral=True
   )
  if not pb_date_eligible(parsed_date):
@@ -1441,7 +1450,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    custom_id="pb:submit:boss"
   )
   self.details_input=ui.TextInput(
-   placeholder="14:32.60 | 11-08-2026",
+   placeholder="30.60 | 11/08/2026",
    max_length=40,
    custom_id="pb:submit:details"
   )
@@ -1469,7 +1478,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   ))
   self.add_item(ui.Label(
    text="PB time & date",
-   description="Use MM:SS.ss | MM-DD-YYYY.",
+   description="Use SS.ss or MM:SS.ss | MM/DD/YYYY or MM-DD-YYYY.",
    component=self.details_input
   ))
   self.add_item(ui.Label(
@@ -1515,7 +1524,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   parsed=parse_submission_details(self.details_input.value)
   if not parsed:
    return await i.response.send_message(
-    "Use **MM:SS.ss | MM-DD-YYYY** for the PB time and date.",
+    "Use **SS.ss or MM:SS.ss | MM/DD/YYYY or MM-DD-YYYY**.",
     ephemeral=True
    )
 
