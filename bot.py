@@ -865,17 +865,22 @@ def add_featured_ranking(panel, results):
   return
 
  champion=results[0]
- # No gold ButtonStyle exists in Discord. Keep the champion in a native
- # gold-trophy heading instead of a disabled gray button.
  champion_text=(
-  "### 🏆 NOVUS #1\n"
-  f"## {fmt(champion['ms'])}\n"
+  f"## {MEDALS[0]} {fmt(champion['ms'])}\n"
   f"{public_members(champion)}\n"
   f"-# Achieved {pb_date_label(champion['pb_date'])}"
  )
  if champion["proof"] and valid_url(champion["proof"]):
   champion_text+=f"\n[↗ Proof]({champion['proof']})"
- panel.add_item(ui.TextDisplay(champion_text))
+ panel.add_item(ui.Section(
+  ui.TextDisplay(champion_text),
+  accessory=ui.Button(
+   label="NOVUS #1",
+   style=discord.ButtonStyle.secondary,
+   disabled=True,
+   custom_id=f"pb:leader:first:{champion['id']}"
+  )
+ ))
 
  remaining=[]
  for rank in range(1,5):
@@ -911,8 +916,8 @@ class BossLeaderboard(ui.LayoutView):
   for index,(variant,results) in enumerate(blocks):
    if index:
     panel.add_item(ui.Separator())
-   title=f"### {clean(variant)} · TOP 5" if len(blocks)>1 else "### TOP 5"
-   panel.add_item(ui.TextDisplay(title))
+   if len(blocks)>1:
+    panel.add_item(ui.TextDisplay(f"### {clean(variant)}"))
    add_featured_ranking(panel,results)
 
   self.add_item(panel)
@@ -949,7 +954,7 @@ class RaidLeaderboard(ui.LayoutView):
   for variant,results in blocks:
    panel=ui.Container(accent_colour=GOLD)
    panel.add_item(ui.TextDisplay(
-    f"### {clean(variant)} · TOP 5"
+    f"### {clean(variant)}"
    ))
    add_featured_ranking(panel,results)
    self.add_item(panel)
@@ -1033,7 +1038,7 @@ class RaidBrowser(ui.LayoutView):
 
   rankings=ui.Container(accent_colour=BLUE)
   rankings.add_item(ui.TextDisplay(
-   f"### {clean(variant)} · TOP 5"
+   f"### {clean(variant)}"
   ))
   rankings.add_item(ui.Separator())
 
@@ -1106,8 +1111,8 @@ class Browser(ui.LayoutView):
   for pos,(variant,results) in enumerate(blocks):
    if pos:
     rankings.add_item(ui.Separator())
-   title=f"### {clean(variant)} · TOP 5" if variant!="Standard" else "### TOP 5"
-   rankings.add_item(ui.TextDisplay(title))
+   if variant!="Standard":
+    rankings.add_item(ui.TextDisplay(f"### {clean(variant)}"))
    add_featured_ranking(rankings,results)
 
   shortcuts=ui.ActionRow()
