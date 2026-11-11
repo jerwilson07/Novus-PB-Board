@@ -1802,59 +1802,54 @@ async def pbclear(i:discord.Interaction):
   ephemeral=True
  )
 
+class TopTenPBPost(ui.LayoutView):
+ """A single-message public snapshot of current Novus PB points."""
+ def __init__(self,points,board_url=None):
+  super().__init__(timeout=None)
+  panel=ui.Container(accent_colour=GOLD)
+  panel.add_item(ui.TextDisplay(
+   "## ✦ NOVUS · PB TOP 10\n"
+   "-# 1st = 5 pts · 2nd = 3 pts · 3rd = 1 pt"
+  ))
+  if points:
+   lines=[]
+   for index,entry in enumerate(points[:10],1):
+    rank={1:"🏆",2:"🥈",3:"🥉"}.get(index,f"**{index}.**")
+    lines.append(
+     f"{rank} <@{entry['member_id']}> · **{entry['points']} pts** "
+     f"({entry['firsts']} first · {entry['seconds']} second · "
+     f"{entry['thirds']} third)"
+    )
+   panel.add_item(ui.TextDisplay("\n".join(lines)))
+  else:
+   panel.add_item(ui.TextDisplay("-# No approved PB points yet."))
+  if board_url and valid_url(board_url):
+   row=ui.ActionRow()
+   row.add_item(ui.Button(
+    label="Full PB Leaderboard",
+    style=discord.ButtonStyle.link,
+    url=board_url
+   ))
+   panel.add_item(row)
+  self.add_item(panel)
+
+
 async def post_current_pb_board(channel,guild_id):
- """Post a public point-in-time board copy without replacing tracked panels.
-
- This command deliberately does not call store.set_* or clear_boss_boards.
- The persistent /pbpanel remains the source of truth for future edits.
- """
- sent=[]
- no_pings=discord.AllowedMentions.none()
- activities=(
-  ["Inferno","Fortis Colosseum","Fight Caves"]
-  + list(RAIDS)
-  + [name for name in BOSSES if name not in ("Inferno","Fortis Colosseum","Fight Caves")]
+ """Post one public Top 10 snapshot; never modify the persistent PB board."""
+ points=await calculate_pb_points(guild_id)
+ tracked=await store.panel(guild_id)
+ board_url=(
+  f"https://discord.com/channels/{guild_id}/{tracked['channel']}/{tracked['message']}"
+  if tracked else None
  )
- try:
-  main=await channel.send(view=await Home.make(guild_id),allowed_mentions=no_pings)
-  sent.append(main)
-  directory=await channel.send(view=BossDirectory(),allowed_mentions=no_pings)
-  sent.append(directory)
-
-  links={}
-  for activity in activities:
-   view=(await RaidLeaderboard.make(guild_id,activity)
-         if activity in RAIDS
-         else await BossLeaderboard.make(guild_id,activity))
-   board=await channel.send(view=view,allowed_mentions=no_pings)
-   sent.append(board)
-   links[activity]=board.jump_url
-   # Pace the burst to reduce Discord channel-rate-limit retries.
-   await asyncio.sleep(0.6)
-
-  await directory.edit(view=BossDirectory(links),allowed_mentions=no_pings)
-  snapshot=await channel.send(
-   view=await SnapshotPanel.make(guild_id),allowed_mentions=no_pings
-  )
-  sent.append(snapshot)
-  footer=await channel.send(
-   f"## [↑ CLICK TO SCROLL TO THE TOP]({main.jump_url})",
-   allowed_mentions=no_pings
-  )
-  sent.append(footer)
-  return main, len(sent)
- except Exception:
-  # A half-posted board can overwhelm a channel. Roll back only the
-  # newly created copy, never the separately tracked PB leaderboard.
-  for message in reversed(sent):
-   try:
-    await message.delete()
-   except discord.HTTPException:
-    logging.warning("Unable to delete partial PB copy message %s",message.id)
-  raise
+ message=await channel.send(
+  view=TopTenPBPost(points,board_url),
+  allowed_mentions=discord.AllowedMentions.none()
+ )
+ return message,1
 
 
-@bot.tree.command(name="pbpost",description="Post a public copy of the current Novus PB board here")
+@bot.tree.command(name="pbpost",description="Post the current Novus PB Top 10 in this channel")
 @app_commands.guild_only()
 @app_commands.default_permissions(manage_guild=True)
 async def pbpost(i:discord.Interaction):
@@ -1873,12 +1868,10 @@ async def pbpost(i:discord.Interaction):
   )
  await i.response.defer(ephemeral=True)
  try:
-  await fetch_activity_emojis(i.guild)
-  main,count=await post_current_pb_board(i.channel,i.guild_id)
+  main,_=await post_current_pb_board(i.channel,i.guild_id)
   await i.followup.send(
-   f"Posted a public copy of the current Novus PB board ({count} messages): "
-   f"{main.jump_url}\n"
-   "-# This copy captures the standings now. /pbpanel still manages the main live board.",
+   f"Posted the Novus PB Top 10: {main.jump_url}\n"
+   "-# This is a snapshot; the main PB leaderboard remains unchanged.",
    ephemeral=True
   )
  except (discord.Forbidden,discord.HTTPException):
