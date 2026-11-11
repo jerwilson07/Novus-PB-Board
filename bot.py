@@ -1172,11 +1172,6 @@ class Review(ui.LayoutView):
   panel.add_item(ui.Separator())
   panel.add_item(ui.TextDisplay("-# PB DATE\n" f"**{clean(r['pb_date'] or 'Not recorded')}**"))
   if active:
-   panel.add_item(ui.TextDisplay(
-    "-# CURRENT #1\n" +
-    (f"**{review_members(leader)}** · **{fmt(leader['ms'])}**" if leader else "No approved record yet.")
-   ))
-   panel.add_item(ui.Separator())
    if not leader:
     difference="First record for this leaderboard"
    elif r["ms"]<leader["ms"]:
@@ -1194,6 +1189,11 @@ class Review(ui.LayoutView):
     accessory=ui.Button(label=label,disabled=True,
      style=discord.ButtonStyle.success if placement==1 else discord.ButtonStyle.secondary,
      custom_id=f"pb:placement:{self.sid}")
+   ))
+   panel.add_item(ui.Separator())
+   panel.add_item(ui.TextDisplay(
+    "-# CURRENT #1\n" +
+    (f"**{review_members(leader)}** · **{fmt(leader['ms'])}**" if leader else "No approved record yet.")
    ))
 
   p=r["proof"]
