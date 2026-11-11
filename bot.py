@@ -471,6 +471,15 @@ async def on_ready():
     await message.edit(view=BossDirectory(jump_links),allowed_mentions=discord.AllowedMentions.none())
    except discord.HTTPException:
     logging.exception("Failed to refresh PB directory emojis")
+  # Update the existing home panel with the latest heading and points.
+  home=await store.panel(guild.id)
+  if home:
+   try:
+    ch=bot.get_channel(home["channel"]) or await bot.fetch_channel(home["channel"])
+    message=await ch.fetch_message(home["message"])
+    await message.edit(view=await Home.make(guild.id),allowed_mentions=discord.AllowedMentions.none())
+   except discord.HTTPException:
+    logging.exception("Failed to refresh PB home panel heading")
   # Refresh the existing footer in place so no /pbpanel rerun is needed.
   footer=await store.footer(guild.id)
   panel=await store.panel(guild.id)
@@ -553,7 +562,7 @@ class Home(ui.LayoutView):
   hero.add_item(ui.Separator())
 
   points_lines=[
-   "### TOP 10 · PB POINTS",
+   "### TOP 10",
    "-# 1st = 5 pts · 2nd = 3 pts · 3rd = 1 pt",
   ]
 
@@ -664,7 +673,7 @@ class BossDirectory(ui.LayoutView):
 
   panel=ui.Container(accent_colour=BLUE)
   panel.add_item(ui.TextDisplay(
-   "## PB Directory\n"
+   "## Boss Directory\n"
    "-# Select an activity to jump to its leaderboard."
   ))
 
