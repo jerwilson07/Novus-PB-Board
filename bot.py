@@ -1578,7 +1578,7 @@ async def checkemojis(i:discord.Interaction):
   "",
   "CoX has no supplied icon in the original ZIP."
  ]
- await i.followup.send("\\n".join(lines)[:1900],ephemeral=True)
+ await i.followup.send("\n".join(lines)[:1900],ephemeral=True)
 
 @bot.tree.command(name="pbpanel",description="Create or refresh the persistent PB panel in this channel")
 @app_commands.guild_only()
