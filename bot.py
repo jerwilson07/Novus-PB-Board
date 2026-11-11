@@ -469,6 +469,101 @@ async def calculate_pb_points(g):
   )
  )[:10]
 
+
+def member_ids_for_record(record):
+ return {
+  int(value.strip()) for value in (record["member_ids"] or "").split(",")
+  if value.strip().isdigit()
+ }
+
+def build_member_profile(rows,member_id):
+ """Compute member standings from exactly the public Top 5 ranking rules."""
+ groups={}
+ history=[]
+ for r in rows:
+  groups.setdefault((r["category"],r["activity"],r["variant"]),[]).append(r)
+  if member_id in member_ids_for_record(r):
+   history.append(r)
+ placements=[]
+ for (category,activity,variant),results in groups.items():
+  results=sorted(results,key=lambda r:(r["ms"],r["id"]))
+  if category=="Bosses" and solo_boss_variant(activity,variant):
+   ranked=unique_solo_results(results,5)
+  else:
+   ranked=unique_team_results(results,5)
+  for pos,r in enumerate(ranked,1):
+   if member_id in member_ids_for_record(r):
+    placements.append((pos,r))
+ placements.sort(key=lambda p:(p[0],p[1]["category"],p[1]["activity"],p[1]["variant"]))
+ history.sort(key=lambda r:(r["updated"] or "",r["id"]),reverse=True)
+ return {
+  "points":sum({1:5,2:3,3:1}.get(pos,0) for pos,_ in placements),
+  "firsts":sum(pos==1 for pos,_ in placements),
+  "seconds":sum(pos==2 for pos,_ in placements),
+  "thirds":sum(pos==3 for pos,_ in placements),
+  "approved_count":len(history),
+  "placements":placements,
+  "history":history
+ }
+
+
+class PersonalPBProfile(ui.LayoutView):
+ """Private Discord-only view of the member's standings and approved history."""
+ def __init__(self,member_id,summary):
+  super().__init__(timeout=900)
+  panel=ui.Container(accent_colour=GOLD)
+  panel.add_item(ui.TextDisplay(f"## ✦ NOVUS · MY PBs\n<@{member_id}>"))
+  panel.add_item(ui.Separator())
+  if not summary["approved_count"]:
+   panel.add_item(ui.TextDisplay(
+    "-# No approved PBs yet. Submit your first record with /pbsubmit."
+   ))
+  else:
+   panel.add_item(ui.TextDisplay(
+    f"**{summary['points']} pts** · 🏆 {summary['firsts']} first · "
+    f"🥈 {summary['seconds']} second · 🥉 {summary['thirds']} third\n"
+    f"-# {summary['approved_count']} approved PB submissions"
+   ))
+   panel.add_item(ui.Separator())
+   if summary["placements"]:
+    lines=[]
+    for rank,r in summary["placements"][:10]:
+     lines.append(
+      f"{MEDALS[rank-1]} **{clean(r['activity'])}** · "
+      f"{clean(r['variant'])} · **{fmt(r['ms'])}**"
+     )
+    panel.add_item(ui.TextDisplay(
+     "### CURRENT TOP 5 PLACEMENTS\n"+"\n".join(lines) +
+     ("\n-# Showing the first 10 placements." if len(summary["placements"])>10 else "")
+    ))
+   else:
+    panel.add_item(ui.TextDisplay(
+     "-# No current Top 5 placements. Your approval history is below."
+    ))
+   panel.add_item(ui.Separator())
+   lines=[
+    f"**{clean(r['activity'])} · {clean(r['variant'])}** · "
+    f"{fmt(r['ms'])} · {pb_date_label(r['pb_date'])}"
+    for r in summary["history"][:8]
+   ]
+   panel.add_item(ui.TextDisplay(
+    "### RECENT APPROVED PBs\n"+"\n".join(lines) +
+    ("\n-# Showing the 8 most recent approvals." if len(summary["history"])>8 else "")
+   ))
+  self.add_item(panel)
+
+
+async def show_my_pbs(i):
+ if not i.guild_id:
+  return await i.response.send_message(
+   "Use this inside the Novus server.",ephemeral=True
+  )
+ rows=await store.approved_for_points(i.guild_id)
+ await i.response.send_message(
+  view=PersonalPBProfile(i.user.id,build_member_profile(rows,i.user.id)),
+  ephemeral=True,allowed_mentions=discord.AllowedMentions.none()
+ )
+
 async def paced_startup_edit(message, **kwargs):
  # Channel-wide edit bursts receive 429s. Leave headroom for other bots.
  await message.edit(**kwargs)
@@ -619,10 +714,17 @@ class Home(ui.LayoutView):
    await i.response.send_modal(SubmitModal())
   async def open_rules(i):
    await i.response.send_modal(RulesModal())
+  mine=ui.Button(
+   label="My PBs",
+   style=discord.ButtonStyle.secondary,
+   custom_id="pb:home:mine"
+  )
   submit.callback=open_submit
   rules.callback=open_rules
+  mine.callback=show_my_pbs
   actions.add_item(submit)
   actions.add_item(rules)
+  actions.add_item(mine)
   hero.add_item(actions)
 
   self.add_item(hero)
@@ -1647,6 +1749,11 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
 @app_commands.guild_only()
 async def pbsubmit(i:discord.Interaction):
  await i.response.send_modal(SubmitModal())
+
+@bot.tree.command(name="mypbs",description="View your Novus PB points, placements and approved records")
+@app_commands.guild_only()
+async def mypbs(i:discord.Interaction):
+ await show_my_pbs(i)
 
 @bot.tree.command(name="pbproof",description="Attach proof to your pending submission")
 @app_commands.guild_only()
