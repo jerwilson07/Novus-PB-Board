@@ -271,7 +271,10 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIn("PB DATE", text)
         self.assertIn("0:12.40", text)
         self.assertIn("14:32.60", text)
-        self.assertTrue(any(isinstance(child, bot.ui.MediaGallery)
+        self.assertFalse(any(isinstance(child, bot.ui.MediaGallery)
+                             for child in panel.children))
+        self.assertTrue(any(isinstance(child, bot.ui.TextDisplay)
+                            and "Open submitted evidence" in child.content
                             for child in panel.children))
         buttons = next(child for child in panel.children
                        if isinstance(child, bot.ui.ActionRow))
@@ -286,6 +289,38 @@ class PBLayoutTests(unittest.TestCase):
         self.assertTrue(any(isinstance(child, bot.ui.TextDisplay)
                             and "Open submitted evidence" in child.content
                             for child in panel.children))
+
+    def test_new_first_no_gallery_even_for_image_url(self):
+        pb = record(id=84, status="approved",
+                    proof="https://example.com/screenshot.png")
+        view = bot.FirstPlaceAnnouncementCard(pb)
+        panel = view.children[0]
+        self.assertFalse(any(isinstance(child, bot.ui.MediaGallery)
+                             for child in panel.children))
+        links = next(item for item in panel.children
+                     if isinstance(item, bot.ui.ActionRow))
+        self.assertEqual(len(links.children), 1)
+        self.assertEqual(links.children[0].label, "View Proof")
+        self.assertEqual(links.children[0].url, pb["proof"])
+
+    def test_only_two_known_announcements_are_eligible_for_in_place_cleanup(self):
+        from types import SimpleNamespace
+        pb = record(id=34, status="approved",
+                    activity="Vorkath",variant="Standard",ms=101400)
+        body = bot.FirstPlaceAnnouncementCard(pb).children[0]
+        # Mirror Discord's nested Components V2 text content.
+        message = SimpleNamespace(components=[body])
+        self.assertTrue(bot.matches_first_announcement(message, pb))
+        self.assertFalse(bot.matches_first_announcement(
+            message, dict(pb, status="pending")
+        ))
+        self.assertFalse(bot.matches_first_announcement(
+            message, dict(pb, ms=200000)
+        ))
+        self.assertEqual(
+            bot.EXISTING_FIRST_ANNOUNCEMENTS,
+            ((1570203003233902657, 34), (1570203078253093076, 33))
+        )
 
     def test_member_profile_uses_team_placements_and_points(self):
         p1 = record(id=101, member_ids="123,456,789", ms=600000)
