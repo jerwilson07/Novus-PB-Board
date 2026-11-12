@@ -569,6 +569,10 @@ async def on_ready():
  if not getattr(bot,"_first_card_retrofit_started",False):
   bot._first_card_retrofit_started=True
   asyncio.create_task(retrofit_existing_first_announcements())
+ # Remove proof previews from two existing #1 general-chat announcements in place.
+ if not getattr(bot,"_first_no_gallery_retrofit_started",False):
+  bot._first_no_gallery_retrofit_started=True
+  asyncio.create_task(remove_existing_first_announcement_galleries())
  # Refresh the previously edited Royal Titans review card from its saved team.
  if not getattr(bot,"_royal_titans_35_review_refresh_started",False):
   bot._royal_titans_35_review_refresh_started=True
@@ -1508,11 +1512,6 @@ class FirstPlaceAnnouncementCard(ui.LayoutView):
     "### Proof\n"
     f"[Open submitted evidence]({proof})"
    ))
-   if proof_looks_like_media(proof):
-    gallery=ui.MediaGallery()
-    gallery.add_item(media=proof,description="Approved Novus #1 PB evidence")
-    panel.add_item(gallery)
-
   links=ui.ActionRow()
   if proof and valid_url(proof):
    links.add_item(ui.Button(
@@ -1643,6 +1642,99 @@ async def retrofit_existing_first_announcements():
   logging.exception("Could not edit existing Novus #1 announcements")
  except Exception:
   logging.exception("Unexpected error editing existing Novus #1 announcements")
+
+
+
+# These two message/record pairs were confirmed by earlier successful edit logs.
+# No channel search, repost or broad historical edits.
+EXISTING_FIRST_ANNOUNCEMENTS=(
+ (1570203003233902657,34),
+ (1570203078253093076,33),
+)
+
+
+def matches_first_announcement(message,record):
+ """Safety check before replacing a Components V2 announcement."""
+ if not record or record["status"]!="approved":
+  return False
+ body=old_announcement_text(message)
+ return all((
+  "NEW NOVUS #1" in body,
+  f"**{clean(record['activity'])} · {clean(record['variant'])}**" in body,
+  f"## {fmt(record['ms'])}" in body,
+  public_members(record) in body,
+ ))
+
+
+async def remove_existing_first_announcement_galleries():
+ """One-time, targeted in-place edit of exactly two existing general-chat posts.
+
+ Keeps proof and leaderboard links, and never publishes new messages or
+ changes any submitted PB data. Per-message markers allow safe retries.
+ """
+ await asyncio.sleep(8)
+ if not GENERAL_CHAT_ID or not bot.user:
+  return
+ try:
+  channel=bot.get_channel(GENERAL_CHAT_ID) or await bot.fetch_channel(GENERAL_CHAT_ID)
+  guild=getattr(channel,"guild",None)
+  if not guild or (GUILD_ID and guild.id!=GUILD_ID):
+   logging.warning("Skipped #1 proof gallery cleanup: general-chat guild mismatch")
+   return
+  approved=await store.all(
+   "SELECT * FROM submissions WHERE guild=? AND status='approved'",(guild.id,)
+  )
+  by_id={r["id"]:r for r in approved}
+  async with store.lock:
+   await store.conn.execute(
+    "CREATE TABLE IF NOT EXISTS one_time_pb_migrations "
+    "(name TEXT PRIMARY KEY, applied TEXT NOT NULL)"
+   )
+   await store.conn.commit()
+  for message_id,record_id in EXISTING_FIRST_ANNOUNCEMENTS:
+   op=f"no_gallery_first_announcement_20261111_{message_id}"
+   if await store.one(
+    "SELECT name FROM one_time_pb_migrations WHERE name=?",(op,)
+   ):
+    continue
+   record=by_id.get(record_id)
+   if record is None:
+    logging.warning("Skipped existing #1 message %s: PB %s missing",message_id,record_id)
+    continue
+   try:
+    message=await channel.fetch_message(message_id)
+    if message.author.id!=bot.user.id or not matches_first_announcement(message,record):
+     logging.warning(
+      "Skipped existing #1 message %s: author/content didn't match approved PB %s",
+      message_id,record_id
+     )
+     continue
+    previous=previous_approved_leader(record,approved)
+    board=await store.boss_board(record["guild"],record["activity"])
+    url=(
+     f"https://discord.com/channels/{record['guild']}/{board['channel']}/{board['message']}"
+     if board else None
+    )
+    await message.edit(
+     view=FirstPlaceAnnouncementCard(record,previous,url),
+     allowed_mentions=discord.AllowedMentions(users=True,roles=False,everyone=False)
+    )
+    async with store.lock:
+     await store.conn.execute(
+      "INSERT OR IGNORE INTO one_time_pb_migrations(name,applied) VALUES(?,?)",
+      (op,now())
+     )
+     await store.conn.commit()
+    logging.info(
+     "Removed proof gallery from existing #1 announcement message=%s record=%s",
+     message_id,record_id
+    )
+   except discord.HTTPException:
+    logging.exception(
+     "Failed to remove proof gallery from existing #1 message %s",message_id
+    )
+ except Exception:
+  logging.exception("Unexpected error removing proof galleries from existing #1 posts")
 
 
 async def announce_first_place(r, previous_leader):
