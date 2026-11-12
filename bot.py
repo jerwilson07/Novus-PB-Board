@@ -1506,12 +1506,8 @@ class FirstPlaceAnnouncementCard(ui.LayoutView):
   panel.add_item(ui.TextDisplay(comparison))
 
   proof=record["proof"]
-  if proof and valid_url(proof):
-   panel.add_item(ui.Separator())
-   panel.add_item(ui.TextDisplay(
-    "### Proof\n"
-    f"[Open submitted evidence]({proof})"
-   ))
+  # Avoid Discord unfurling direct proof images inside the public post.
+  # Only the explicit View Proof link button should expose the evidence URL.
   links=ui.ActionRow()
   if proof and valid_url(proof):
    links.add_item(ui.Button(
@@ -1692,7 +1688,7 @@ async def remove_existing_first_announcement_galleries():
    )
    await store.conn.commit()
   for message_id,record_id in EXISTING_FIRST_ANNOUNCEMENTS:
-   op=f"no_gallery_first_announcement_20261111_{message_id}"
+   op=f"no_inline_proof_preview_first_announcement_v2_{message_id}"
    if await store.one(
     "SELECT name FROM one_time_pb_migrations WHERE name=?",(op,)
    ):
@@ -1715,9 +1711,39 @@ async def remove_existing_first_announcement_galleries():
      f"https://discord.com/channels/{record['guild']}/{board['channel']}/{board['message']}"
      if board else None
     )
+    logging.info(
+     "Before #1 preview cleanup message=%s: components=%s attachments=%s embeds=%s",
+     message_id,
+     [str(getattr(c,"type",type(c).__name__)) for c in message.components],
+     len(message.attachments),len(message.embeds)
+    )
     await message.edit(
      view=FirstPlaceAnnouncementCard(record,previous,url),
+     content=None,
+     embeds=[],
+     attachments=[],
+     suppress=True,
      allowed_mentions=discord.AllowedMentions(users=True,roles=False,everyone=False)
+    )
+    # Check Discord's actual stored message, not just the edit response.
+    updated=await channel.fetch_message(message_id)
+    def has_gallery(items):
+     for item in items:
+      if getattr(item,"type",None)==discord.ComponentType.media_gallery:
+       return True
+      if has_gallery(getattr(item,"children",()) or ()):
+       return True
+     return False
+    if updated.attachments or updated.embeds or has_gallery(updated.components):
+     logging.warning(
+      "Proof preview not fully cleared message=%s: attachments=%s embeds=%s media_gallery=%s",
+      message_id,len(updated.attachments),len(updated.embeds),has_gallery(updated.components)
+     )
+     # Leave the one-time operation eligible to run again if Discord retained media.
+     continue
+    logging.info(
+     "Confirmed #1 announcement is preview-free message=%s: attachments=0 embeds=0 gallery=False",
+     message_id
     )
     async with store.lock:
      await store.conn.execute(
@@ -1726,7 +1752,7 @@ async def remove_existing_first_announcement_galleries():
      )
      await store.conn.commit()
     logging.info(
-     "Removed proof gallery from existing #1 announcement message=%s record=%s",
+     "Removed inline proof preview from existing #1 announcement message=%s record=%s",
      message_id,record_id
     )
    except discord.HTTPException:
@@ -1754,6 +1780,7 @@ async def announce_first_place(r, previous_leader):
        if board else None)
   await channel.send(
    view=FirstPlaceAnnouncementCard(r,previous_leader,url),
+   suppress_embeds=True,
    allowed_mentions=discord.AllowedMentions(users=True,roles=False,everyone=False)
   )
   logging.info("Announced new Novus #1 submission %s in general chat",r["id"])
