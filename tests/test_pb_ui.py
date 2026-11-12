@@ -273,9 +273,10 @@ class PBLayoutTests(unittest.TestCase):
         self.assertIn("14:32.60", text)
         self.assertFalse(any(isinstance(child, bot.ui.MediaGallery)
                              for child in panel.children))
-        self.assertTrue(any(isinstance(child, bot.ui.TextDisplay)
-                            and "Open submitted evidence" in child.content
-                            for child in panel.children))
+        self.assertFalse(any(isinstance(child, bot.ui.TextDisplay)
+                             and ("Open submitted evidence" in child.content
+                                  or pb["proof"] in child.content)
+                             for child in panel.children))
         buttons = next(child for child in panel.children
                        if isinstance(child, bot.ui.ActionRow))
         self.assertEqual([button.label for button in buttons.children],
@@ -286,9 +287,10 @@ class PBLayoutTests(unittest.TestCase):
         panel = bot.FirstPlaceAnnouncementCard(pb).children[0]
         self.assertFalse(any(isinstance(child, bot.ui.MediaGallery)
                              for child in panel.children))
-        self.assertTrue(any(isinstance(child, bot.ui.TextDisplay)
-                            and "Open submitted evidence" in child.content
-                            for child in panel.children))
+        self.assertFalse(any(isinstance(child, bot.ui.TextDisplay)
+                             and ("Open submitted evidence" in child.content
+                                  or pb["proof"] in child.content)
+                             for child in panel.children))
 
     def test_new_first_no_gallery_even_for_image_url(self):
         pb = record(id=84, status="approved",
@@ -302,6 +304,19 @@ class PBLayoutTests(unittest.TestCase):
         self.assertEqual(len(links.children), 1)
         self.assertEqual(links.children[0].label, "View Proof")
         self.assertEqual(links.children[0].url, pb["proof"])
+
+    def test_image_proof_is_link_button_only_no_markdown_embed(self):
+        pb = record(id=85, proof="https://cdn.discordapp.com/attachments/image.png")
+        card = bot.FirstPlaceAnnouncementCard(pb, None)
+        panel = card.children[0]
+        texts = [x.content for x in panel.children
+                 if isinstance(x, bot.ui.TextDisplay)]
+        self.assertNotIn(pb["proof"], "\\n".join(texts))
+        self.assertFalse(any(isinstance(x, bot.ui.MediaGallery)
+                             for x in panel.children))
+        linkrow = next(x for x in panel.children
+                       if isinstance(x, bot.ui.ActionRow))
+        self.assertEqual(linkrow.children[0].url, pb["proof"])
 
     def test_only_two_known_announcements_are_eligible_for_in_place_cleanup(self):
         from types import SimpleNamespace
