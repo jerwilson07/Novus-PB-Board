@@ -11,6 +11,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 TOKEN=os.getenv("DISCORD_TOKEN","")
 GUILD_ID=int(os.getenv("GUILD_ID","0"))
+NOVUS_GUILD_ID=1532817291048124466
 REVIEW_ID=int(os.getenv("REVIEW_CHANNEL_ID","0"))
 GENERAL_CHAT_ID=int(os.getenv("PB_GENERAL_CHAT_CHANNEL_ID","1532817292205883514"))
 DBPATH=os.getenv("DATABASE_PATH","novus_pb.sqlite3")
@@ -60,6 +61,8 @@ BOSSES={
  "The Whisperer":["Normal","Awakened"]}
 CATS={"Raids":RAIDS,"Bosses":BOSSES}
 NON_SOLO_BOSSES={"Yama","Royal Titans"}
+ROYAL_TITANS_35_PARTNER="What A Piety"
+royal_titans_35_partner_id=None
 
 def solo_boss_variant(activity,variant):
  return activity not in NON_SOLO_BOSSES
@@ -69,11 +72,38 @@ PB_EARLIEST_DATE=datetime(2026,11,7).date()
 def pb_date_eligible(value):
  return value>=PB_EARLIEST_DATE
 
-def public_members(r):
+def stored_member_ids(r):
  try: raw=r["member_ids"]
  except (KeyError,IndexError): raw=None
- ids=[x.strip() for x in (raw or "").split(",") if x.strip().isdigit()]
- return " · ".join(f"<@{x}>" for x in ids) if ids else clean(r["members"])
+ return list(dict.fromkeys(x.strip() for x in (raw or "").split(",") if x.strip().isdigit()))
+
+def is_royal_titans_35(r):
+ return (
+  r["guild"]==NOVUS_GUILD_ID and r["id"]==35
+  and r["category"]=="Bosses" and r["activity"]=="Royal Titans"
+  and r["variant"]=="Standard" and r["ms"]==46800
+  and r["pb_date"]=="2026-11-11"
+ )
+
+def public_members(r):
+ """Render every saved teammate without assuming that the submitter played."""
+ ids=stored_member_ids(r)
+ names=[name.strip() for name in (r["members"] or "").split(",") if name.strip()]
+ if is_royal_titans_35(r) and len(ids)==1 and ids[0]!=str(r["submitter"]):
+  # Staff confirmed this older entry's missing teammate. Keep the correction
+  # display-only and never infer other teammates from who submitted a PB.
+  partner=(f"<@{royal_titans_35_partner_id}>" if royal_titans_35_partner_id
+           else clean(ROYAL_TITANS_35_PARTNER))
+  return f"<@{ids[0]}> · {partner}"
+ expected=team_size(r["category"],r["variant"],r["activity"])
+ if ids and (
+  len(ids)>=len(names) or (expected is not None and len(ids)==expected)
+  or (r["activity"] in NON_SOLO_BOSSES and len(ids)==2)
+ ):
+  return " · ".join(f"<@{x}>" for x in ids)
+ # Older data can contain the full roster as text but only some Discord IDs.
+ # Show the full saved names rather than guessing which IDs go with them.
+ return " · ".join(clean(name) for name in names)
 
 def unique_solo_results(results,limit=5):
  unique=[]
@@ -243,6 +273,8 @@ def proof_looks_like_media(url):
   return path.endswith((".png",".jpg",".jpeg",".gif",".webp",".mp4",".mov",".webm"))
  except ValueError:
   return False
+TEAM_BOSS_PARTY_FORMATS={"Boss Solo":1,"Boss Duo":2}
+
 def team_size(cat,variant,activity=None):
  if cat=="Bosses":
   return None if activity in NON_SOLO_BOSSES else 1
@@ -252,10 +284,7 @@ def team_size(cat,variant,activity=None):
  m=re.search(r"(\d+)-Man",variant);return int(m.group(1)) if m else None
 
 def review_members(r):
- try: raw=r["member_ids"]
- except (KeyError,IndexError): raw=None
- ids=[x.strip() for x in (raw or "").split(",") if x.strip().isdigit()]
- return " · ".join(f"<@{x}>" for x in ids) if ids else clean(r["members"])
+ return public_members(r)
 
 class Store:
  def __init__(self):self.conn=None;self.lock=asyncio.Lock()
@@ -559,6 +588,27 @@ async def paced_startup_edit(message, **kwargs):
  await message.edit(**kwargs)
  await asyncio.sleep(1.4)
 
+async def resolve_royal_titans_35_partner(guild):
+ """Verify the historical teammate's Discord mention when possible."""
+ global royal_titans_35_partner_id
+ if guild.id!=NOVUS_GUILD_ID:
+  return
+ record=await store.one("SELECT * FROM submissions WHERE guild=? AND id=35",(guild.id,))
+ if not record or not is_royal_titans_35(record):
+  return
+ ids=stored_member_ids(record)
+ if len(ids)!=1 or ids[0]==str(record["submitter"]):
+  return
+ try:
+  member=guild.get_member(record["submitter"]) or await guild.fetch_member(record["submitter"])
+ except discord.HTTPException:
+  return  # The verified teammate's plain display name is still available.
+ if any(
+  value and " ".join(value.casefold().split())==ROYAL_TITANS_35_PARTNER.casefold()
+  for value in (member.name,member.global_name,member.display_name)
+ ):
+  royal_titans_35_partner_id=member.id
+
 @bot.event
 async def on_ready():
  # Refresh persisted views only once per process, not after every reconnect.
@@ -573,13 +623,12 @@ async def on_ready():
  if not getattr(bot,"_first_no_gallery_retrofit_started",False):
   bot._first_no_gallery_retrofit_started=True
   asyncio.create_task(remove_existing_first_announcement_galleries())
- # Refresh the previously edited Royal Titans review card from its saved team.
- if not getattr(bot,"_royal_titans_35_review_refresh_started",False):
-  bot._royal_titans_35_review_refresh_started=True
-  asyncio.create_task(refresh_royal_titans_35_review_once())
  # Retrieve actual emoji IDs, then update existing leaderboard messages in place.
  for guild in bot.guilds:
   await fetch_activity_emojis(guild)
+  await resolve_royal_titans_35_partner(guild)
+  if guild.id==NOVUS_GUILD_ID:
+   asyncio.create_task(refresh_royal_titans_35_review_once())
   records=await store.boss_boards(guild.id)
   jump_links={r["activity"]:f"https://discord.com/channels/{guild.id}/{r['channel']}/{r['message']}" for r in records}
   directory=await store.boss_panel(guild.id)
@@ -610,7 +659,7 @@ async def on_ready():
     await paced_startup_edit(message, content=f"## [↑ CLICK TO SCROLL TO THE TOP]({url})",allowed_mentions=discord.AllowedMentions.none())
    except discord.HTTPException:
     logging.exception("Failed to refresh PB scroll-to-top footer")
-  for record in records:
+  for record in sorted(records,key=lambda record:record["activity"]!="Royal Titans"):
    activity=record["activity"]
    if activity not in BOSSES and activity not in RAIDS:continue
    try:
@@ -618,6 +667,8 @@ async def on_ready():
     message=await ch.fetch_message(record["message"])
     view=await (BossLeaderboard.make(guild.id,activity) if activity in BOSSES else RaidLeaderboard.make(guild.id,activity))
     await paced_startup_edit(message, view=view,allowed_mentions=discord.AllowedMentions.none())
+    if guild.id==NOVUS_GUILD_ID and activity=="Royal Titans":
+     await verify_royal_titans_35_public(guild,ch,message.id)
    except discord.HTTPException:
     logging.exception("Failed to refresh PB icon for %s",activity)
 
@@ -1147,30 +1198,31 @@ class Browser(ui.LayoutView):
 
 
 def submitted_review_members(r):
- """Display the requested two names for Royal Titans #35 without changing PB data."""
- names=review_members(r)
- if (
-  r["id"]==35 and r["activity"]=="Royal Titans"
-  and r["variant"]=="Standard" and r["ms"]==46800
-  and r["pb_date"]=="2026-11-11"
- ):
-  ids=[p.strip() for p in (r["member_ids"] or "").split(",") if p.strip().isdigit()]
-  if str(r["submitter"]) not in ids:
-   return f"{names} · <@{r['submitter']}>"
- return names
+ return public_members(r)
+
+
+async def verify_royal_titans_35_public(guild,channel,message_id):
+ record=await store.one("SELECT * FROM submissions WHERE guild=? AND id=35",(guild.id,))
+ if not record or not is_royal_titans_35(record) or record["status"]!="approved":
+  return
+ message=await channel.fetch_message(message_id)
+ expected=public_members(record)
+ if any(expected in line and fmt(record["ms"]) in line
+        for line in old_announcement_text(message).splitlines()):
+  logging.info(
+   "Verified Royal Titans #35 public roster in Discord: message=%s time=%s roster=%s",
+   message_id,fmt(record["ms"]),expected,
+  )
+ else:
+  logging.warning("Royal Titans #35 public roster not present on message=%s",message_id)
 
 
 def royal_titans_35_ready_to_refresh(r):
  """Match only the existing review; never change roster or approval state."""
  if not r:return False
  return (
-  r["id"]==35
-  and r["category"]=="Bosses"
-  and r["activity"]=="Royal Titans"
-  and r["variant"]=="Standard"
-  and r["ms"]==46800
-  and r["pb_date"]=="2026-11-11"
-  and r["status"] in ("pending","awaiting_proof")
+  is_royal_titans_35(r)
+  and r["status"] in ("pending","awaiting_proof","approved")
   and r["review_message"]==1570207527088431165
  )
 
@@ -1178,7 +1230,7 @@ def royal_titans_35_ready_to_refresh(r):
 async def refresh_royal_titans_35_review_once():
  """Update the existing Royal Titans #35 review, no team DB or rank changes."""
  await asyncio.sleep(5)
- key="royal_titans_35_refresh_review_order_v3"
+ key="royal_titans_35_refresh_shared_roster_v4"
  try:
   async with store.lock:
    await store.conn.execute(
@@ -1226,8 +1278,7 @@ async def refresh_royal_titans_35_review_once():
    )
    await store.conn.commit()
   logging.info(
-   "Royal Titans #35 review updated in place: both stored members in Submitted PB, "
-   "no Listed players header (message=%s)",
+   "Royal Titans #35 review roster updated in place (message=%s)",
    message.id
   )
  except discord.HTTPException:
@@ -1292,6 +1343,10 @@ class Review(ui.LayoutView):
    panel.add_item(ui.TextDisplay(
     "-# CURRENT #1\n" +
     (f"**{review_members(leader)}** · **{fmt(leader['ms'])}**" if leader else "No approved record yet.")
+   ))
+  else:
+   panel.add_item(ui.TextDisplay(
+    "-# SUBMITTED PB\n" f"**{submitted_review_members(r)}** · **{fmt(r['ms'])}**"
    ))
 
   p=r["proof"]
@@ -1804,7 +1859,7 @@ async def decide(i,sid,choice):
  if not await store.change(sid,r["status"],target,i.user.id):
   return await i.response.send_message("Another reviewer updated this record.",ephemeral=True)
  updated=await store.one("SELECT * FROM submissions WHERE id=?",(sid,))
- await i.response.edit_message(view=await Review.make(updated))
+ await i.response.edit_message(view=await Review.make(updated),allowed_mentions=discord.AllowedMentions.none())
  if choice=="approve":
   await refresh_panel(i.guild_id,updated["activity"])
   try:
@@ -1877,7 +1932,7 @@ class ProofUploadView(ui.View):
   self.add_item(attach)
 
 
-async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
+async def submit(i,cat,act,variant,t,pb_date,members,proof="",*,party_size=None):
  try:ms=parse_ms(t)
  except ValueError as e:return await i.response.send_message(str(e),ephemeral=True)
 
@@ -1909,8 +1964,12 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
  required=team_size(cat,variant,act)
  if not members:
   return await i.response.send_message("Select at least one party member.",ephemeral=True)
- if cat=="Bosses" and act in NON_SOLO_BOSSES and len(members) not in (1,2):
-  return await i.response.send_message("Expected 1 or 2 Discord member(s) for this boss.",ephemeral=True)
+ if cat=="Bosses" and act in NON_SOLO_BOSSES:
+  if party_size not in (1,2):
+   return await i.response.send_message("Choose **Boss Solo** or **Boss Duo** for this PB.",ephemeral=True)
+  required=party_size
+  if party_size==2 and len(members)!=2:
+   return await i.response.send_message("Select both Discord members who played in the duo.",ephemeral=True)
  if required is not None and len(members)!=required:
   return await i.response.send_message(f"Expected {required} Discord member(s) for this category.",ephemeral=True)
  if len({m.id for m in members})!=len(members):
@@ -1978,6 +2037,10 @@ def submission_format_options():
    options.append(
     discord.SelectOption(label=mode,value=mode)
    )
+ options.extend(
+  discord.SelectOption(label=f"{label} (Royal Titans / Yama)",value=label)
+  for label in TEAM_BOSS_PARTY_FORMATS
+ )
  return options
 
 def boss_submission_options():
@@ -2046,7 +2109,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   ))
   self.add_item(ui.Label(
    text="Raid format / boss mode",
-   description="Choose the matching raid format. DT2 bosses use Normal or Awakened.",
+   description="Use Boss Solo/Duo for Royal Titans and Yama. DT2 bosses use Normal/Awakened.",
    component=self.format_select
   ))
   self.add_item(ui.Label(
@@ -2069,6 +2132,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   target=self.target_select.values[0]
   selected_format=self.format_select.values[0]
   selected_boss=self.boss_select.values[0]
+  party_size=None
 
   if target.startswith("raid|||"):
    category="Raids"
@@ -2089,6 +2153,13 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
     )
    activity=selected_boss
    valid_modes=BOSSES[activity]
+   if activity in NON_SOLO_BOSSES:
+    party_size=TEAM_BOSS_PARTY_FORMATS.get(selected_format)
+    if party_size is None:
+     return await i.response.send_message(
+      f"Choose **Boss Solo** or **Boss Duo** for **{activity}**.",
+      ephemeral=True
+     )
    if len(valid_modes)==1:
     variant=valid_modes[0]
    elif selected_format not in valid_modes:
@@ -2115,7 +2186,8 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    time_value,
    pb_date,
    self.members_select.values,
-   ""
+   "",
+   party_size=party_size,
   )
 
 

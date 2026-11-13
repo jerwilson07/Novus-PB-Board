@@ -385,7 +385,7 @@ class PBLayoutTests(unittest.TestCase):
 
     def test_royal_titans_review_team_appears_at_submitted_time_not_header(self):
         submitted = record(
-            id=35, category="Bosses", activity="Royal Titans",
+            id=35, guild=bot.NOVUS_GUILD_ID, category="Bosses", activity="Royal Titans",
             variant="Standard", member_ids="707,808", submitter=808,
             members="07 Ezra, What A Piety", ms=46800,
             pb_date="2026-11-11", status="pending",
@@ -427,14 +427,14 @@ class PBLayoutTests(unittest.TestCase):
             dict(submitted, member_ids="707")
         ))
         self.assertIn(
-            "<@707> · <@808>",
+            "<@707> · What A Piety",
             bot.submitted_review_members(dict(submitted, member_ids="707"))
         )
         self.assertEqual(
             bot.submitted_review_members(submitted),
             "<@707> · <@808>",
         )
-        self.assertFalse(bot.royal_titans_35_ready_to_refresh(
+        self.assertTrue(bot.royal_titans_35_ready_to_refresh(
             dict(submitted, status="approved")
         ))
 
