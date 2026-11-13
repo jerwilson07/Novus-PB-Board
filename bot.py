@@ -273,8 +273,6 @@ def proof_looks_like_media(url):
   return path.endswith((".png",".jpg",".jpeg",".gif",".webp",".mp4",".mov",".webm"))
  except ValueError:
   return False
-TEAM_BOSS_PARTY_FORMATS={"Boss Solo":1,"Boss Duo":2}
-
 def team_size(cat,variant,activity=None):
  if cat=="Bosses":
   return None if activity in NON_SOLO_BOSSES else 1
@@ -1932,7 +1930,7 @@ class ProofUploadView(ui.View):
   self.add_item(attach)
 
 
-async def submit(i,cat,act,variant,t,pb_date,members,proof="",*,party_size=None):
+async def submit(i,cat,act,variant,t,pb_date,members,proof=""):
  try:ms=parse_ms(t)
  except ValueError as e:return await i.response.send_message(str(e),ephemeral=True)
 
@@ -1964,12 +1962,11 @@ async def submit(i,cat,act,variant,t,pb_date,members,proof="",*,party_size=None)
  required=team_size(cat,variant,act)
  if not members:
   return await i.response.send_message("Select at least one party member.",ephemeral=True)
- if cat=="Bosses" and act in NON_SOLO_BOSSES:
-  if party_size not in (1,2):
-   return await i.response.send_message("Choose **Boss Solo** or **Boss Duo** for this PB.",ephemeral=True)
-  required=party_size
-  if party_size==2 and len(members)!=2:
-   return await i.response.send_message("Select both Discord members who played in the duo.",ephemeral=True)
+ if cat=="Bosses" and act in NON_SOLO_BOSSES and len(members)>2:
+  return await i.response.send_message(
+   f"Select no more than two Discord members for **{act}**.",
+   ephemeral=True
+  )
  if required is not None and len(members)!=required:
   return await i.response.send_message(f"Expected {required} Discord member(s) for this category.",ephemeral=True)
  if len({m.id for m in members})!=len(members):
@@ -2020,7 +2017,7 @@ def submission_format_options():
  seen=set()
  options=[
   discord.SelectOption(
-   label="Select format / mode if needed",
+   label="Select if non-DT2 boss",
    value="__none__"
   )
  ]
@@ -2037,10 +2034,6 @@ def submission_format_options():
    options.append(
     discord.SelectOption(label=mode,value=mode)
    )
- options.extend(
-  discord.SelectOption(label=f"{label} (Royal Titans / Yama)",value=label)
-  for label in TEAM_BOSS_PARTY_FORMATS
- )
  return options
 
 def boss_submission_options():
@@ -2109,7 +2102,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   ))
   self.add_item(ui.Label(
    text="Raid format / boss mode",
-   description="Use Boss Solo/Duo for Royal Titans and Yama. DT2 bosses use Normal/Awakened.",
+   description="Pick a raid format, Normal/Awakened for DT2, or the first option for any other boss.",
    component=self.format_select
   ))
   self.add_item(ui.Label(
@@ -2132,7 +2125,6 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   target=self.target_select.values[0]
   selected_format=self.format_select.values[0]
   selected_boss=self.boss_select.values[0]
-  party_size=None
 
   if target.startswith("raid|||"):
    category="Raids"
@@ -2153,13 +2145,6 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
     )
    activity=selected_boss
    valid_modes=BOSSES[activity]
-   if activity in NON_SOLO_BOSSES:
-    party_size=TEAM_BOSS_PARTY_FORMATS.get(selected_format)
-    if party_size is None:
-     return await i.response.send_message(
-      f"Choose **Boss Solo** or **Boss Duo** for **{activity}**.",
-      ephemeral=True
-     )
    if len(valid_modes)==1:
     variant=valid_modes[0]
    elif selected_format not in valid_modes:
@@ -2186,8 +2171,6 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
    time_value,
    pb_date,
    self.members_select.values,
-   "",
-   party_size=party_size,
   )
 
 

@@ -48,7 +48,11 @@ class PBLayoutTests(unittest.TestCase):
             list(bot.RAIDS),
         )
         self.assertEqual(bot.submission_target_options()[-1].label, "Boss PB")
-        format_labels = [option.label for option in bot.submission_format_options()]
+        format_options = bot.submission_format_options()
+        self.assertEqual((format_options[0].label, format_options[0].value),
+                         ("Select if non-DT2 boss", "__none__"))
+        format_labels = [option.label for option in format_options]
+        self.assertFalse(any(label.startswith(("Boss Solo", "Boss Duo")) for label in format_labels))
         self.assertIn("Solo", format_labels)
         self.assertIn("Hard Mode · Trio", format_labels)
         self.assertIn("Expert · 8-Man", format_labels)
