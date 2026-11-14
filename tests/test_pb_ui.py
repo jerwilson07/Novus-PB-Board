@@ -26,6 +26,23 @@ def record(**overrides):
 
 
 class PBLayoutTests(unittest.TestCase):
+    def test_tfa_five_man_is_submittable_and_fits_full_leaderboard(self):
+        activity = "The Fractured Archive"
+        variants = bot.RAIDS[activity]
+        self.assertEqual(variants, ["Solo", "Duo", "Trio", "4-Man", "5-Man"])
+        options = bot.submission_format_options()
+        self.assertIn("5-Man", [option.value for option in options])
+        self.assertLessEqual(len(options), 25)
+        self.assertEqual(bot.team_size("Raids", "5-Man", activity), 5)
+
+        # Exercise the Discord component budget with a record in every bracket.
+        board = bot.RaidLeaderboard(activity, [
+            (variant, [record(id=index, activity=activity, variant=variant)])
+            for index, variant in enumerate(variants, 1)
+        ])
+        self.assertEqual(len(board.children), 6)
+        self.assertEqual(board.children[-1].children[0].content, "### 5-Man")
+
     def test_raid_order_and_tfa_name(self):
         self.assertEqual(
             list(bot.RAIDS),

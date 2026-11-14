@@ -26,7 +26,7 @@ PB_BANNER_STATIC="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e
 PB_BANNER_ANIMATED="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/main/assets/novus_pb_banner.gif"
 PB_BANNER_URL=os.getenv("PB_BANNER_URL") or (PB_BANNER_ANIMATED if PB_BANNER_GIF.is_file() else PB_BANNER_STATIC)
 RAIDS={
- "The Fractured Archive":["Solo","Duo","Trio","4-Man"],
+ "The Fractured Archive":["Solo","Duo","Trio","4-Man","5-Man"],
  "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
  "Chambers of Xeric":["Normal · Solo","Normal · Duo","Normal · Trio","Normal · 5-Man","Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
  "Tombs of Amascut":["Expert · Solo","Expert · 8-Man"]}
