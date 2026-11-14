@@ -25,10 +25,12 @@ PB_BANNER_GIF=Path(__file__).parent / "assets" / "novus_pb_banner.gif"
 PB_BANNER_STATIC="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/e56d115997dde7d1696ef4c535ce366da87ba84b/assets/novus_pb_banner.jpg"
 PB_BANNER_ANIMATED="https://raw.githubusercontent.com/jerwilson07/Novus-PB-Board/main/assets/novus_pb_banner.gif"
 PB_BANNER_URL=os.getenv("PB_BANNER_URL") or (PB_BANNER_ANIMATED if PB_BANNER_GIF.is_file() else PB_BANNER_STATIC)
+REGULAR_RAID_SIZES=("Solo","Duo","Trio","4-Man","5-Man")
+SHARED_SIZE_RAIDS=("The Fractured Archive","Theatre of Blood","Chambers of Xeric")
 RAIDS={
- "The Fractured Archive":["Solo","Duo","Trio","4-Man","5-Man"],
- "Theatre of Blood":["Normal · Duo","Normal · Trio","Normal · 4-Man","Normal · 5-Man","Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
- "Chambers of Xeric":["Normal · Solo","Normal · Duo","Normal · Trio","Normal · 5-Man","Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
+ "The Fractured Archive":[*REGULAR_RAID_SIZES],
+ "Theatre of Blood":[*REGULAR_RAID_SIZES,"Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
+ "Chambers of Xeric":[*REGULAR_RAID_SIZES,"Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
  "Tombs of Amascut":["Expert · Solo","Expert · 8-Man"]}
 RAID_LABELS={
  "The Fractured Archive":"TFA",
@@ -273,6 +275,13 @@ def proof_looks_like_media(url):
   return path.endswith((".png",".jpg",".jpeg",".gif",".webp",".mp4",".mov",".webm"))
  except ValueError:
   return False
+def canonical_raid_variant(category,activity,variant):
+ if category=="Raids" and activity in SHARED_SIZE_RAIDS and variant.startswith("Normal · "):
+  size=variant.removeprefix("Normal · ")
+  if size in REGULAR_RAID_SIZES:
+   return size
+ return variant
+
 def team_size(cat,variant,activity=None):
  if cat=="Bosses":
   return None if activity in NON_SOLO_BOSSES else 1
@@ -309,12 +318,21 @@ class Store:
    await self.conn.execute("ALTER TABLE submissions ADD COLUMN member_ids TEXT")
   if "pb_date" not in columns:
    await self.conn.execute("ALTER TABLE submissions ADD COLUMN pb_date TEXT")
+  # Relabel existing PBs in place so all readers see one regular bracket per size.
+  migration=await self.conn.executemany(
+   """UPDATE submissions SET variant=? WHERE category='Raids'
+      AND activity IN (?,?,?) AND variant=?""",
+   [(size,*SHARED_SIZE_RAIDS,f"Normal · {size}") for size in REGULAR_RAID_SIZES]
+  )
   await self.conn.commit()
+  if migration.rowcount:
+   logging.info("Relabelled %s existing regular raid PBs by team size",migration.rowcount)
  async def one(self,q,args=()):
   async with self.conn.execute(q,args) as c:return await c.fetchone()
  async def all(self,q,args=()):
   async with self.conn.execute(q,args) as c:return await c.fetchall()
  async def add(self,g,u,cat,act,v,m,member_ids,ms,pb_date,p):
+  v=canonical_raid_variant(cat,act,v)
   async with self.lock:
    c=await self.conn.execute("""INSERT INTO submissions(guild,submitter,category,activity,variant,members,member_ids,ms,pb_date,proof,created,updated)
    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(g,u,cat,act,v,m,member_ids,ms,pb_date,p,now(),now()))
@@ -665,6 +683,8 @@ async def on_ready():
     message=await ch.fetch_message(record["message"])
     view=await (BossLeaderboard.make(guild.id,activity) if activity in BOSSES else RaidLeaderboard.make(guild.id,activity))
     await paced_startup_edit(message, view=view,allowed_mentions=discord.AllowedMentions.none())
+    if activity in SHARED_SIZE_RAIDS:
+     logging.info("Refreshed raid team-size brackets for %s on Discord message %s",activity,message.id)
     if guild.id==NOVUS_GUILD_ID and activity=="Royal Titans":
      await verify_royal_titans_35_public(guild,ch,message.id)
    except discord.HTTPException:
@@ -906,7 +926,7 @@ class BossDirectory(ui.LayoutView):
 
 
 
-def add_featured_ranking(panel, results):
+def add_featured_ranking(panel, results, *, compact=False):
  # Display one featured champion and keep the remaining places easy to scan.
  # No custom fonts or image cards: everything is native Discord Components V2.
  if not results:
@@ -923,15 +943,16 @@ def add_featured_ranking(panel, results):
  )
  if champion["proof"] and valid_url(champion["proof"]):
   champion_text+=f"\n[↗ Proof]({champion['proof']})"
- panel.add_item(ui.Section(
-  ui.TextDisplay(champion_text),
-  accessory=ui.Button(
-   label="NOVUS #1",
-   style=discord.ButtonStyle.success,
-   disabled=True,
-   custom_id=f"pb:leader:first:{champion['id']}"
-  )
- ))
+ if not compact:
+  panel.add_item(ui.Section(
+   ui.TextDisplay(champion_text),
+   accessory=ui.Button(
+    label="NOVUS #1",
+    style=discord.ButtonStyle.success,
+    disabled=True,
+    custom_id=f"pb:leader:first:{champion['id']}"
+   )
+  ))
 
  remaining=[]
  for rank in range(1,5):
@@ -948,8 +969,11 @@ def add_featured_ranking(panel, results):
    f"{MEDALS[rank]} **{fmt(r['ms'])}** · {public_members(r)}{proof}"
   )
 
- panel.add_item(ui.Separator())
- panel.add_item(ui.TextDisplay("\n".join(remaining)))
+ if compact:
+  panel.add_item(ui.TextDisplay(champion_text+"\n\n"+"\n".join(remaining)))
+ else:
+  panel.add_item(ui.Separator())
+  panel.add_item(ui.TextDisplay("\n".join(remaining)))
 
 
 class BossLeaderboard(ui.LayoutView):
@@ -1002,12 +1026,15 @@ class RaidLeaderboard(ui.LayoutView):
   ))
   self.add_item(heading)
 
+  # The title uses 2 components and a populated featured bracket uses 7.
+  # Keep every bracket on one message within Discord's 40-component limit.
+  compact=2+sum(7 if results else 3 for _,results in blocks)>40
   for variant,results in blocks:
    panel=ui.Container(accent_colour=GOLD)
    panel.add_item(ui.TextDisplay(
     f"### {clean(variant)}"
    ))
-   add_featured_ranking(panel,results)
+   add_featured_ranking(panel,results,compact=compact)
    self.add_item(panel)
 
  @classmethod
@@ -2129,6 +2156,7 @@ class SubmitModal(ui.Modal,title="NOVUS | PB Submission"):
   if target.startswith("raid|||"):
    category="Raids"
    _,activity=target.split("|||",1)
+   selected_format=canonical_raid_variant(category,activity,selected_format)
    if selected_format not in RAIDS[activity]:
     valid=" · ".join(RAIDS[activity])
     return await i.response.send_message(

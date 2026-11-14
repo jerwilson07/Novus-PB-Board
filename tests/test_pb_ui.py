@@ -248,7 +248,7 @@ class PBLayoutTests(unittest.TestCase):
         boards = [
             bot.BossLeaderboard("Vorkath", [("Standard", [record_one])]),
             bot.BossLeaderboard("Vardorvis", [("Normal", []), ("Awakened", [])]),
-            bot.RaidLeaderboard("Theatre of Blood", [("Normal · Trio", [])]),
+            bot.RaidLeaderboard("Theatre of Blood", [("Trio", [])]),
             bot.RaidBrowser(123, 0, 0, [record_one]),
             bot.Browser(123, "Bosses", 0, [("Standard", [record_one])]),
         ]
@@ -263,7 +263,7 @@ class PBLayoutTests(unittest.TestCase):
         multi = "\n".join(text_displays(boards[1]))
         self.assertIn("Normal", multi)
         self.assertIn("Awakened", multi)
-        self.assertIn("Normal · Trio", "\n".join(text_displays(boards[2])))
+        self.assertIn("### Trio", "\n".join(text_displays(boards[2])))
 
     def test_gold_announcement_card_and_date(self):
         pb = record(id=81, pb_date="2026-11-08", ms=872600)
