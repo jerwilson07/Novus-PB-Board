@@ -19,10 +19,11 @@ class RaidSizeTests(unittest.TestCase):
         for activity in bot.SHARED_SIZE_RAIDS:
             with self.subTest(activity=activity):
                 variants = bot.RAIDS[activity]
-                regular = sizes[1:] if activity == "Theatre of Blood" else sizes
+                excluded = {"Theatre of Blood": "Solo", "Chambers of Xeric": "4-Man"}.get(activity)
+                regular = [size for size in sizes if size != excluded]
                 self.assertEqual(variants[:len(regular)], regular)
-                if activity == "Theatre of Blood":
-                    self.assertNotIn("Solo", variants)
+                if excluded:
+                    self.assertNotIn(excluded, variants)
                 self.assertEqual([bot.team_size("Raids", size, activity) for size in sizes],
                                  [1, 2, 3, 4, 5])
                 board = bot.RaidLeaderboard(activity, [

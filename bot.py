@@ -30,7 +30,7 @@ SHARED_SIZE_RAIDS=("The Fractured Archive","Theatre of Blood","Chambers of Xeric
 RAIDS={
  "The Fractured Archive":[*REGULAR_RAID_SIZES],
  "Theatre of Blood":[*REGULAR_RAID_SIZES[1:],"Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
- "Chambers of Xeric":[*REGULAR_RAID_SIZES,"Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
+ "Chambers of Xeric":[*(size for size in REGULAR_RAID_SIZES if size!="4-Man"),"Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
  "Tombs of Amascut":["Expert · Solo","Expert · 8-Man"]}
 RAID_LABELS={
  "The Fractured Archive":"TFA",
