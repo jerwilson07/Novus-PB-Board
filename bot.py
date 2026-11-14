@@ -29,7 +29,7 @@ REGULAR_RAID_SIZES=("Solo","Duo","Trio","4-Man","5-Man")
 SHARED_SIZE_RAIDS=("The Fractured Archive","Theatre of Blood","Chambers of Xeric")
 RAIDS={
  "The Fractured Archive":[*REGULAR_RAID_SIZES],
- "Theatre of Blood":[*REGULAR_RAID_SIZES,"Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
+ "Theatre of Blood":[*REGULAR_RAID_SIZES[1:],"Hard Mode · Trio","Hard Mode · 4-Man","Hard Mode · 5-Man"],
  "Chambers of Xeric":[*REGULAR_RAID_SIZES,"Challenge Mode · Solo","Challenge Mode · Duo","Challenge Mode · Trio","Challenge Mode · 5-Man"],
  "Tombs of Amascut":["Expert · Solo","Expert · 8-Man"]}
 RAID_LABELS={
@@ -278,7 +278,7 @@ def proof_looks_like_media(url):
 def canonical_raid_variant(category,activity,variant):
  if category=="Raids" and activity in SHARED_SIZE_RAIDS and variant.startswith("Normal · "):
   size=variant.removeprefix("Normal · ")
-  if size in REGULAR_RAID_SIZES:
+  if size in REGULAR_RAID_SIZES and size in RAIDS[activity]:
    return size
  return variant
 
@@ -321,8 +321,9 @@ class Store:
   # Relabel existing PBs in place so all readers see one regular bracket per size.
   migration=await self.conn.executemany(
    """UPDATE submissions SET variant=? WHERE category='Raids'
-      AND activity IN (?,?,?) AND variant=?""",
-   [(size,*SHARED_SIZE_RAIDS,f"Normal · {size}") for size in REGULAR_RAID_SIZES]
+      AND activity=? AND variant=?""",
+   [(size,activity,f"Normal · {size}") for activity in SHARED_SIZE_RAIDS
+    for size in REGULAR_RAID_SIZES if size in RAIDS[activity]]
   )
   await self.conn.commit()
   if migration.rowcount:
