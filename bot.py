@@ -187,7 +187,7 @@ def now(): return datetime.now(timezone.utc).isoformat(timespec="seconds")
 ACTIVITY_EMOJIS={
  "The Fractured Archive":"tfa",
  "Theatre of Blood":"verzik",
- "Tombs of Amascut":"toa_em",
+ "Tombs of Amascut":"warden",
  "Chambers of Xeric":"COX",
  "Inferno":"zuk",
  "Fortis Colosseum":"sol_heredit",
